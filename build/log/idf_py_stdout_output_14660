@@ -1,0 +1,30 @@
+Command: ninja all
+[1/11] Performing build step for 'bootloader'
+[1/1] C:\WINDOWS\system32\cmd.exe /C "cd /D D:\Progs\ESP\projects\test_htn\build\bootloader\esp-idf\esptool_py && d:\Progs\ESP\.espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe D:/Progs/ESP/esp/v5.5.1/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x1000 D:/Progs/ESP/projects/test_htn/build/bootloader/bootloader.bin"
+Bootloader binary size 0x6680 bytes. 0x980 bytes (8%) free.
+[2/11] No install step for 'bootloader'
+[3/11] Completed 'bootloader'
+[4/11] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/main.c.obj
+In file included from D:/Progs/ESP/projects/test_htn/main/main.c:9:
+D:/Progs/ESP/projects/test_htn/components/tcs34725/include/tcs34725.h:46:18: warning: 'tcs_write' declared 'static' but never defined [-Wunused-function]
+   46 | static esp_err_t tcs_write(uint8_t reg, uint8_t value);
+      |                  ^~~~~~~~~
+D:/Progs/ESP/projects/test_htn/components/tcs34725/include/tcs34725.h:47:18: warning: 'tcs_read' declared 'static' but never defined [-Wunused-function]
+   47 | static esp_err_t tcs_read(tcs34725_handler *handler, uint8_t reg, uint8_t *data, size_t len);
+      |                  ^~~~~~~~
+D:/Progs/ESP/projects/test_htn/main/main.c:31:20: warning: 'TAG' defined but not used [-Wunused-variable]
+   31 | static const char *TAG = "main";
+      |                    ^~~
+[5/11] Building C object esp-idf/tcs34725/CMakeFiles/__idf_tcs34725.dir/tcs34725.c.obj
+[6/11] Linking C static library esp-idf\tcs34725\libtcs34725.a
+[7/11] Linking C static library esp-idf\main\libmain.a
+[8/11] Generating esp-idf/esp_system/ld/sections.ld
+[9/11] Linking CXX executable test_htn.elf
+[10/11] Generating binary image from built executable
+esptool.py v4.10.0
+Creating esp32 image...
+Merged 2 ELF sections
+Successfully created esp32 image.
+Generated D:/Progs/ESP/projects/test_htn/build/test_htn.bin
+[11/11] C:\WINDOWS\system32\cmd.exe /C "cd /D D:\Progs\ESP\projects\test_htn\build\esp-idf\esptool_py && d:\Progs\ESP\.espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe D:/Progs/ESP/esp/v5.5.1/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app D:/Progs/ESP/projects/test_htn/build/partition_table/partition-table.bin D:/Progs/ESP/projects/test_htn/build/test_htn.bin"
+test_htn.bin binary size 0x2f2b0 bytes. Smallest app partition is 0x100000 bytes. 0xd0d50 bytes (82%) free.
