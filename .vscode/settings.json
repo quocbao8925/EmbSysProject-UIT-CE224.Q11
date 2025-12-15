@@ -28,5 +28,6 @@
     "esp_log.h": "c",
     "tcs34725.h": "c"
   },
-  "idf.flashType": "UART"
+  "idf.flashType": "UART",
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json"
 }

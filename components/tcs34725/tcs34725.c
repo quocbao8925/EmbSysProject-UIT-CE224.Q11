@@ -93,11 +93,20 @@ void tcs34725_reader(tcs34725_handler *handler)
             handler->g = (uint8_t)(gn * 255.0f + 0.5f);
             handler->b = (uint8_t)(bn * 255.0f + 0.5f);
 
-            ESP_LOGI(TAG,
+            /*ESP_LOGI(TAG,
                 "Raw: C=%u R=%u G=%u B=%u | Normalized RGB = %d, %d, %d",
-                c, r, g, b, handler->r, handler->g, handler->b);
+                c, r, g, b, handler->r, handler->g, handler->b);*/
         } else {
             ESP_LOGE(TAG, "Failed to read color data");
         }
-        vTaskDelay(pdMS_TO_TICKS(200));
+}
+void get_rgb_values(tcs34725_handler *handler, uint8_t *r, uint8_t *g, uint8_t *b)
+{
+    if (handler == NULL || r == NULL || g == NULL || b == NULL) {
+        ESP_LOGE(TAG, "Invalid arguments to get_rgb_values");
+        return;
+    }
+    *r = handler->r;
+    *g = handler->g;
+    *b = handler->b;
 }

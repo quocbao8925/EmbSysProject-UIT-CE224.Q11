@@ -36,8 +36,6 @@ void ir_sensor_init(ir_sensor_handler* handler, gpio_num_t gpio_num, bool use_pu
     handler->gpio_num = s_gpio;
     handler->current_level = gpio_get_level(s_gpio);
     handler->event_count = 0;
-    // install ISR service
-    gpio_install_isr_service(0);
     // add ISR handler
     gpio_isr_handler_add(s_gpio, ir_sensor_isr, (void*)(uint32_t)s_gpio);
 
