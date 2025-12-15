@@ -18,6 +18,8 @@
 
 // ================== PIN MAP ==================
 #define IRSENSOR_GPIO   GPIO_NUM_16
+#define IRSENSOR_GPIO1   GPIO_NUM_17
+#define IRSENSOR_GPIO2   GPIO_NUM_23
 #define BTN_GPIO        GPIO_NUM_33
 #define USE_PULLUP      1
 
@@ -37,8 +39,12 @@ static const char *TAG = "main";
 // ================== GLOBAL HANDLERS ==================
 static TaskHandle_t button_task_handle = NULL;
 static TaskHandle_t rgb_task_handle    = NULL;
+bool is_running = false;
+uint8_t counter[3] = {0}; // 0=RED,1=GREEN,2=BLUE
 
 ir_sensor_handler ir_handler;
+ir_sensor_handler ir_handler1;
+ir_sensor_handler ir_handler2;
 ir_sensor_event_t ir_event;
 tcs34725_handler  tcs_handler;
 
@@ -136,12 +142,13 @@ static void button_task(void *arg)
 
         // debounce mềm
         vTaskDelay(pdMS_TO_TICKS(30));
-        if (gpio_get_level(BTN_GPIO) == 0) {
+        if (gpio_get_level(BTN_GPIO) == 0  && !is_running) {
             ESP_LOGI(TAG, "Button pressed -> start classification");
 
             // notify rgb_task bắt đầu 1 lượt phân loại
             if (rgb_task_handle) {
                 xTaskNotify(rgb_task_handle, 0x01, eSetBits);
+                is_running = true;
             }
         }
     }
@@ -159,8 +166,20 @@ static void conveyor_run_until_ir_or_timeout(uint32_t timeout_ms)
         // IR detect -> dừng
         if (gpio_get_level(IRSENSOR_GPIO) == IR_ACTIVE_LEVEL) {
             ESP_LOGI(TAG, "IR detected -> stop conveyor");
+            counter[2]++; // BLUE
             break;
         }
+        if (gpio_get_level(IRSENSOR_GPIO1) == IR_ACTIVE_LEVEL) {
+            ESP_LOGI(TAG, "IR1 detected -> stop conveyor");
+            counter[1]++; // GREEN
+            break;
+        }
+        if (gpio_get_level(IRSENSOR_GPIO2) == IR_ACTIVE_LEVEL) {
+            ESP_LOGI(TAG, "IR2 detected -> stop conveyor");
+            counter[0]++; // RED
+            break;
+        }
+
 
         // timeout -> dừng
         int64_t now = esp_timer_get_time();
@@ -242,6 +261,7 @@ static void rgb_task(void *arg)
         int color = detect_majority_color_with_buffer();
 
         // 2) mở/đóng cổng theo màu (bạn đã có code sẵn servo_open/close)
+
         switch (color) {
             case 0: // RED
                 servo_close(&pca, 0);
@@ -270,11 +290,12 @@ static void rgb_task(void *arg)
 
         // 3) chạy băng tải, tối đa 5s hoặc IR detect thì dừng
         conveyor_run_until_ir_or_timeout(CONVEYOR_TIMEOUT_MS);
-
+        
         // 4) đảm bảo dừng băng tải (double safety)
         motor_set_speed(&motorA, 0);
-
+        is_running = false;
         ESP_LOGI(TAG, "Classification cycle finished.\n");
+        ESP_LOGI(TAG, "Counters: RED=%d GREEN=%d BLUE=%d", counter[0], counter[1], counter[2]);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -294,6 +315,8 @@ void app_main(void)
     // init devices
     ESP_ERROR_CHECK(pca9685_init(&pca));        // PCA init (KHÔNG install i2c bên trong)
     ir_sensor_init(&ir_handler, IRSENSOR_GPIO, USE_PULLUP);
+    ir_sensor_init(&ir_handler1, IRSENSOR_GPIO1, USE_PULLUP);
+    ir_sensor_init(&ir_handler2, IRSENSOR_GPIO2, USE_PULLUP);
     encoder_init(&wheel_encoder);
     motor_init(&motorA);
     tcs34725_init(&tcs_handler);
@@ -309,7 +332,4 @@ void app_main(void)
     button_init();
 
     ESP_LOGI(TAG, "System ready. Press button to start classification.");
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
 }

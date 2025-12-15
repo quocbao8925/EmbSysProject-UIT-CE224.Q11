@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "test_htn",
-    "project_version":    "d05648d-dirty",
+    "project_version":    "a059ce6-dirty",
     "project_path":       "D:/Progs/ESP/projects/test_htn",
     "idf_path":           "D:/Progs/ESP/esp/v5.5.1/esp-idf",
     "build_dir":          "D:/Progs/ESP/projects/test_htn/build",
