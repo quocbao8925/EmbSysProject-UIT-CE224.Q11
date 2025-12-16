@@ -534,6 +534,13 @@ D:/Progs/ESP/projects/test_htn/build/esp-idf/motor_speed_control/CMakeFiles/list
 D:/Progs/ESP/projects/test_htn/build/esp-idf/motor_speed_control/CMakeFiles/install.dir
 D:/Progs/ESP/projects/test_htn/build/esp-idf/motor_speed_control/CMakeFiles/install/local.dir
 D:/Progs/ESP/projects/test_htn/build/esp-idf/motor_speed_control/CMakeFiles/install/strip.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/i2c_lcd/CMakeFiles/__idf_i2c_lcd.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/i2c_lcd/CMakeFiles/edit_cache.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/i2c_lcd/CMakeFiles/rebuild_cache.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/i2c_lcd/CMakeFiles/list_install_components.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/i2c_lcd/CMakeFiles/install.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/i2c_lcd/CMakeFiles/install/local.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/i2c_lcd/CMakeFiles/install/strip.dir
 D:/Progs/ESP/projects/test_htn/build/esp-idf/espressif__led_strip/CMakeFiles/__idf_espressif__led_strip.dir
 D:/Progs/ESP/projects/test_htn/build/esp-idf/espressif__led_strip/CMakeFiles/edit_cache.dir
 D:/Progs/ESP/projects/test_htn/build/esp-idf/espressif__led_strip/CMakeFiles/rebuild_cache.dir

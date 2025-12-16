@@ -334,6 +334,11 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
+  include("D:/Progs/ESP/projects/test_htn/build/esp-idf/i2c_lcd/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
   include("D:/Progs/ESP/projects/test_htn/build/esp-idf/espressif__led_strip/cmake_install.cmake")
 endif()
 

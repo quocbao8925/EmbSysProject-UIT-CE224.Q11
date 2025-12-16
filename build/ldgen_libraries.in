@@ -101,11 +101,13 @@ $<TARGET_FILE:idf::motor_speed_control>
 $<TARGET_FILE:__idf_motor_l298n>
 $<TARGET_FILE:__idf_encoder>
 $<TARGET_FILE:__idf_pid_speed>
+$<TARGET_FILE:idf::i2c_lcd>
 $<TARGET_FILE:idf::espressif__led_strip>
 $<TARGET_FILE:idf::main>
 $<TARGET_FILE:__idf_ir_sensor>
 $<TARGET_FILE:__idf_tcs34725>
 $<TARGET_FILE:__idf_pca9685>
 $<TARGET_FILE:__idf_motor_speed_control>
+$<TARGET_FILE:__idf_i2c_lcd>
 $<TARGET_FILE:__idf_espressif__led_strip>
 $<TARGET_FILE:idf::esp-idf-lib__i2cdev>

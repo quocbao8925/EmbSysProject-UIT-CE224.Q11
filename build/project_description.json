@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "test_htn",
-    "project_version":    "a059ce6-dirty",
+    "project_version":    "eca4d47-dirty",
     "project_path":       "D:/Progs/ESP/projects/test_htn",
     "idf_path":           "D:/Progs/ESP/esp/v5.5.1/esp-idf",
     "build_dir":          "D:/Progs/ESP/projects/test_htn/build",
@@ -25,8 +25,8 @@
         "COMPONENT_KCONFIGS_PROJBUILD" : "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/bootloader/Kconfig.projbuild;D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_app_format/Kconfig.projbuild;D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_rom/Kconfig.projbuild;D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esptool_py/Kconfig.projbuild;D:/Progs/ESP/esp/v5.5.1/esp-idf/components/partition_table/Kconfig.projbuild;D:/Progs/ESP/projects/test_htn/main/Kconfig.projbuild"
     },
     "common_component_reqs": [ "cxx", "newlib", "freertos", "esp_hw_support", "heap", "log", "soc", "hal", "esp_rom", "esp_common", "esp_system", "xtensa" ],
-    "build_components" : [ "app_update", "bootloader", "bootloader_support", "cxx", "driver", "efuse", "encoder", "esp-idf-lib__esp_idf_lib_helpers", "esp-idf-lib__i2cdev", "esp_app_format", "esp_bootloader_format", "esp_common", "esp_driver_ana_cmpr", "esp_driver_bitscrambler", "esp_driver_dac", "esp_driver_gpio", "esp_driver_gptimer", "esp_driver_i2c", "esp_driver_i2s", "esp_driver_ledc", "esp_driver_mcpwm", "esp_driver_parlio", "esp_driver_pcnt", "esp_driver_rmt", "esp_driver_sdio", "esp_driver_sdm", "esp_driver_sdmmc", "esp_driver_sdspi", "esp_driver_spi", "esp_driver_tsens", "esp_driver_twai", "esp_driver_uart", "esp_driver_usb_serial_jtag", "esp_hw_support", "esp_mm", "esp_partition", "esp_pm", "esp_ringbuf", "esp_rom", "esp_security", "esp_system", "esp_timer", "espressif__led_strip", "esptool_py", "freertos", "hal", "heap", "ir_sensor", "log", "main", "mbedtls", "motor_l298n", "motor_speed_control", "newlib", "partition_table", "pca9685", "pid_speed", "pthread", "sdmmc", "soc", "spi_flash", "tcs34725", "xtensa", "" ],
-    "build_component_paths" : [ "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/app_update", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/bootloader", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/bootloader_support", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/cxx", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/driver", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/efuse", "D:/Progs/ESP/projects/test_htn/components/encoder", "D:/Progs/ESP/projects/test_htn/managed_components/esp-idf-lib__esp_idf_lib_helpers", "D:/Progs/ESP/projects/test_htn/managed_components/esp-idf-lib__i2cdev", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_app_format", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_bootloader_format", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_common", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_ana_cmpr", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_bitscrambler", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_dac", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_gpio", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_gptimer", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_i2c", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_i2s", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_ledc", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_mcpwm", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_parlio", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_pcnt", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_rmt", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_sdio", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_sdm", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_sdmmc", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_sdspi", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_spi", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_tsens", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_twai", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_uart", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_usb_serial_jtag", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_hw_support", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_mm", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_partition", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_pm", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_ringbuf", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_rom", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_security", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_system", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_timer", "D:/Progs/ESP/projects/test_htn/managed_components/espressif__led_strip", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esptool_py", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/freertos", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/hal", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/heap", "D:/Progs/ESP/projects/test_htn/components/ir_sensor", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/log", "D:/Progs/ESP/projects/test_htn/main", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/mbedtls", "D:/Progs/ESP/projects/test_htn/components/motor_l298n", "D:/Progs/ESP/projects/test_htn/components/motor_speed_control", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/newlib", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/partition_table", "D:/Progs/ESP/projects/test_htn/components/pca9685", "D:/Progs/ESP/projects/test_htn/components/pid_speed", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/pthread", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/sdmmc", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/soc", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/spi_flash", "D:/Progs/ESP/projects/test_htn/components/tcs34725", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/xtensa", "" ],
+    "build_components" : [ "app_update", "bootloader", "bootloader_support", "cxx", "driver", "efuse", "encoder", "esp-idf-lib__esp_idf_lib_helpers", "esp-idf-lib__i2cdev", "esp_app_format", "esp_bootloader_format", "esp_common", "esp_driver_ana_cmpr", "esp_driver_bitscrambler", "esp_driver_dac", "esp_driver_gpio", "esp_driver_gptimer", "esp_driver_i2c", "esp_driver_i2s", "esp_driver_ledc", "esp_driver_mcpwm", "esp_driver_parlio", "esp_driver_pcnt", "esp_driver_rmt", "esp_driver_sdio", "esp_driver_sdm", "esp_driver_sdmmc", "esp_driver_sdspi", "esp_driver_spi", "esp_driver_tsens", "esp_driver_twai", "esp_driver_uart", "esp_driver_usb_serial_jtag", "esp_hw_support", "esp_mm", "esp_partition", "esp_pm", "esp_ringbuf", "esp_rom", "esp_security", "esp_system", "esp_timer", "espressif__led_strip", "esptool_py", "freertos", "hal", "heap", "i2c_lcd", "ir_sensor", "log", "main", "mbedtls", "motor_l298n", "motor_speed_control", "newlib", "partition_table", "pca9685", "pid_speed", "pthread", "sdmmc", "soc", "spi_flash", "tcs34725", "xtensa", "" ],
+    "build_component_paths" : [ "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/app_update", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/bootloader", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/bootloader_support", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/cxx", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/driver", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/efuse", "D:/Progs/ESP/projects/test_htn/components/encoder", "D:/Progs/ESP/projects/test_htn/managed_components/esp-idf-lib__esp_idf_lib_helpers", "D:/Progs/ESP/projects/test_htn/managed_components/esp-idf-lib__i2cdev", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_app_format", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_bootloader_format", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_common", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_ana_cmpr", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_bitscrambler", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_dac", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_gpio", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_gptimer", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_i2c", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_i2s", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_ledc", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_mcpwm", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_parlio", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_pcnt", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_rmt", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_sdio", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_sdm", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_sdmmc", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_sdspi", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_spi", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_tsens", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_twai", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_uart", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_driver_usb_serial_jtag", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_hw_support", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_mm", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_partition", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_pm", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_ringbuf", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_rom", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_security", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_system", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esp_timer", "D:/Progs/ESP/projects/test_htn/managed_components/espressif__led_strip", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/esptool_py", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/freertos", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/hal", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/heap", "D:/Progs/ESP/projects/test_htn/components/i2c_lcd", "D:/Progs/ESP/projects/test_htn/components/ir_sensor", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/log", "D:/Progs/ESP/projects/test_htn/main", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/mbedtls", "D:/Progs/ESP/projects/test_htn/components/motor_l298n", "D:/Progs/ESP/projects/test_htn/components/motor_speed_control", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/newlib", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/partition_table", "D:/Progs/ESP/projects/test_htn/components/pca9685", "D:/Progs/ESP/projects/test_htn/components/pid_speed", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/pthread", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/sdmmc", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/soc", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/spi_flash", "D:/Progs/ESP/projects/test_htn/components/tcs34725", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/xtensa", "" ],
     "build_component_info" : {
         "app_update": {
             "alias": "idf::app_update",
@@ -733,6 +733,21 @@
             "sources": [ "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/heap/heap_caps_base.c", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/heap/heap_caps.c", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/heap/heap_caps_init.c", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/heap/multi_heap.c", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/heap/tlsf/tlsf.c", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/heap/port/memory_layout_utils.c", "D:/Progs/ESP/esp/v5.5.1/esp-idf/components/heap/port/esp32/memory_layout.c" ],
             "include_dirs": [ "include", "tlsf" ]
         },
+        "i2c_lcd": {
+            "alias": "idf::i2c_lcd",
+            "target": "___idf_i2c_lcd",
+            "prefix": "idf",
+            "dir": "D:/Progs/ESP/projects/test_htn/components/i2c_lcd",
+            "type": "LIBRARY",
+            "lib": "__idf_i2c_lcd",
+            "reqs": [ "driver", "freertos" ],
+            "priv_reqs": [],
+            "managed_reqs": [],
+            "managed_priv_reqs": [],
+            "file": "D:/Progs/ESP/projects/test_htn/build/esp-idf/i2c_lcd/libi2c_lcd.a",
+            "sources": [ "D:/Progs/ESP/projects/test_htn/components/i2c_lcd/i2c_lcd.c" ],
+            "include_dirs": [ "include" ]
+        },
         "ir_sensor": {
             "alias": "idf::ir_sensor",
             "target": "___idf_ir_sensor",
@@ -770,7 +785,7 @@
             "dir": "D:/Progs/ESP/projects/test_htn/main",
             "type": "LIBRARY",
             "lib": "__idf_main",
-            "reqs": [ "ir_sensor", "tcs34725", "pca9685", "pid_speed", "motor_l298n", "encoder", "motor_speed_control" ],
+            "reqs": [ "ir_sensor", "tcs34725", "pca9685", "pid_speed", "motor_l298n", "encoder", "motor_speed_control", "i2c_lcd", "freertos", "driver", "esp_timer" ],
             "priv_reqs": [ "pca9685", "espressif__led_strip" ],
             "managed_reqs": [],
             "managed_priv_reqs": [ "pca9685", "espressif__led_strip" ],
@@ -2277,7 +2292,7 @@
             "prefix": "idf",
             "dir": "D:/Progs/ESP/projects/test_htn/main",
             "lib": "__idf_main",
-            "reqs": [ "ir_sensor", "tcs34725", "pca9685", "pid_speed", "motor_l298n", "encoder", "motor_speed_control" ],
+            "reqs": [ "ir_sensor", "tcs34725", "pca9685", "pid_speed", "motor_l298n", "encoder", "motor_speed_control", "i2c_lcd", "freertos", "driver", "esp_timer" ],
             "priv_reqs": [ "pca9685", "espressif__led_strip" ],
             "managed_reqs": [],
             "managed_priv_reqs": [ "pca9685", "espressif__led_strip" ],
@@ -2290,6 +2305,18 @@
             "dir": "D:/Progs/ESP/projects/test_htn/components/encoder",
             "lib": "__idf_encoder",
             "reqs": [ "driver", "esp_timer", "freertos" ],
+            "priv_reqs": [],
+            "managed_reqs": [],
+            "managed_priv_reqs": [],
+            "include_dirs": [ "include" ]
+        },
+        "i2c_lcd": {
+            "alias": "idf::i2c_lcd",
+            "target": "___idf_i2c_lcd",
+            "prefix": "idf",
+            "dir": "D:/Progs/ESP/projects/test_htn/components/i2c_lcd",
+            "lib": "__idf_i2c_lcd",
+            "reqs": [ "driver", "freertos" ],
             "priv_reqs": [],
             "managed_reqs": [],
             "managed_priv_reqs": [],

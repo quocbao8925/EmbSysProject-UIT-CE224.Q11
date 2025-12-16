@@ -16,18 +16,22 @@
 #include "motor_l298n.h"
 #include "encoder.h"
 
+#include "motor_speed_control.h"
+#include "i2c_lcd.h"
+
 // ================== PIN MAP ==================
 #define IRSENSOR_GPIO   GPIO_NUM_16
 #define IRSENSOR_GPIO1   GPIO_NUM_17
 #define IRSENSOR_GPIO2   GPIO_NUM_23
 #define BTN_GPIO        GPIO_NUM_33
+#define BTN_GPIO1       GPIO_NUM_32
 #define USE_PULLUP      1
 
 // I2C for TCS34725 + PCA9685
 #define I2C_PORT        I2C_NUM_1
 #define I2C_SDA         GPIO_NUM_18
 #define I2C_SCL         GPIO_NUM_19
-#define I2C_FREQ        400000
+#define I2C_FREQ        100000
 
 // Conveyor settings
 #define CONVEYOR_SPEED_PERCENT  50
@@ -41,6 +45,8 @@ static TaskHandle_t button_task_handle = NULL;
 static TaskHandle_t rgb_task_handle    = NULL;
 bool is_running = false;
 uint8_t counter[3] = {0}; // 0=RED,1=GREEN,2=BLUE
+uint8_t speed_buffer[4] = {0,2,4,6}; // PID speed buffer
+uint8_t speed_idx = 0;
 
 ir_sensor_handler ir_handler;
 ir_sensor_handler ir_handler1;
@@ -62,6 +68,8 @@ motor_t motorA = {
     .pwm_freq     = 20000,
     .pwm_mode     = LEDC_LOW_SPEED_MODE
 };
+
+pid_speed_t pid ;
 
 pca9685_t pca = {
     .i2c_port = I2C_PORT,
@@ -111,7 +119,7 @@ static void i2c_bus_init(void)
 static void button_init(void)
 {
     gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << BTN_GPIO),
+        .pin_bit_mask = (1ULL << BTN_GPIO) | (1ULL << BTN_GPIO1),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -120,6 +128,7 @@ static void button_init(void)
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
     ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_GPIO, button_isr, NULL));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_GPIO1, button_isr, NULL));
 }
 
 static void IRAM_ATTR button_isr(void *arg)
@@ -151,6 +160,10 @@ static void button_task(void *arg)
                 is_running = true;
             }
         }
+        if (gpio_get_level(BTN_GPIO1) == 0) {
+            speed_idx = (speed_idx + 1) % 4;
+            // hiển thị tốc độ hiện tại
+            ESP_LOGI(TAG, "Speed button pressed -> speed set to %u RPS", speed_buffer[speed_idx]);}
     }
 }
 
@@ -299,6 +312,22 @@ static void rgb_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
+void motor_pid_task(void *arg)
+{
+    const TickType_t period = pdMS_TO_TICKS(500); // 100 ms
+    const float dt = 0.5f; // 100 ms in seconds
+
+    while (1) {
+        motor_speed_pid_step(
+            &motorA,
+            &wheel_encoder,
+            &pid,
+            speed_buffer[speed_idx], // use speed from buffer
+            dt
+        );
+        vTaskDelay(period);
+    }
+}
 
 // ================== APP MAIN ==================
 void app_main(void)
@@ -311,6 +340,10 @@ void app_main(void)
 
     // I2C bus init (1 lần duy nhất)
     i2c_bus_init();
+    lcd_init(I2C_PORT); // khởi tạo LCD trên bus đã có
+    lcd_clear();
+    lcd_put_cur(0, 0);
+    lcd_send_string("I2C Shared Bus!");
 
     // init devices
     ESP_ERROR_CHECK(pca9685_init(&pca));        // PCA init (KHÔNG install i2c bên trong)
@@ -323,8 +356,16 @@ void app_main(void)
 
     motor_set_direction(&motorA, MOTOR_DIR_FORWARD);
     motor_set_speed(&motorA, 0);
-
+    pid_speed_init(&pid,
+               4.0f,    // Kp  ↓↓↓
+               1.0f,    // Ki  ↓↓↓
+               1.0f,    // Kd  ↑↑
+               -5.0f,   // ΔPWM min
+               5.0f);   // ΔPWM max
     // create tasks (TẠO TASK TRƯỚC, RỒI mới gắn ISR)
+    motor_set_direction(&motorA, MOTOR_DIR_FORWARD);
+
+    xTaskCreate(motor_pid_task, "motor_pid", 2048, NULL, 5, NULL);
     xTaskCreate(button_task, "button_task", 2048, NULL, 10, &button_task_handle);
     xTaskCreate(rgb_task,    "rgb_task",    4096, NULL, 9,  &rgb_task_handle);
 
@@ -332,4 +373,57 @@ void app_main(void)
     button_init();
 
     ESP_LOGI(TAG, "System ready. Press button to start classification.");
+    char buffer[32];
+    int counter = 0;
+    while (1) {
+        // Format chuỗi
+        sprintf(buffer, "Counter: %03d", counter);
+        
+        // Hiển thị ra LCD
+        lcd_put_cur(1, 0);
+        lcd_send_string(buffer);
+
+        // Tăng biến đếm
+        counter++;
+        if (counter > 999) counter = 0;
+
+        ESP_LOGI(TAG, "%s", buffer);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
 }
+
+// void app_main(void)
+// {
+//     // 1. Khởi tạo LCD (Hàm này đã tự khởi tạo I2C bên trong)
+//     lcd_init();
+//     lcd_clear();
+
+//     lcd_put_cur(0, 0);
+//     lcd_send_string("System Init...");
+//     vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+//     // Xóa dòng thông báo
+//     lcd_put_cur(0, 0);
+//     lcd_send_string("Status: Running");
+
+//     int counter = 0;
+    
+//     // SỬA LỖI Ở ĐÂY: Tăng kích thước buffer từ 16 lên 32
+//     char buffer[32]; 
+
+//     while (1) {
+//         // Format chuỗi
+//         sprintf(buffer, "Counter: %03d", counter);
+        
+//         // Hiển thị ra LCD
+//         lcd_put_cur(1, 0);
+//         lcd_send_string(buffer);
+
+//         // Tăng biến đếm
+//         counter++;
+//         if (counter > 999) counter = 0;
+
+//         ESP_LOGI(TAG, "%s", buffer);
+//         vTaskDelay(1000 / portTICK_PERIOD_MS);
+//     }
+// }
