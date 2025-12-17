@@ -58,8 +58,8 @@ To achieve system stability, we utilized the following embedded protocols and te
 │   ├── main.c              # Main application logic
 │   └── ...
 ├── components/
-│   ├── motor_driver/       # Library for DC Motor & Servo
-│   ├── sensor_handler/     # Library for RGB & IR Sensors
+│   ├── motor_speed_control/         # Library for DC Motor
+│   ├── tcs34725/                    # Library for RGBSensors
 │   └── ...
 ├── CMakeLists.txt          # Build configuration
 └── README.md               # Project documentation
