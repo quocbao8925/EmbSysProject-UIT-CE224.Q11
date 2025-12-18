@@ -3,7 +3,10 @@
 
 static float current_pwm = 0.0f;       // Giá trị tính toán nội bộ của PID
 static uint8_t last_applied_pwm = 0;   // Giá trị thực tế đã nạp xuống motor
-
+#define MIN_PWM      55.0f   // deadzone L298N (tune)
+#define KICK_PWM    100.0f
+#define KICK_TIME_MS 150
+static int64_t kick_end_time = 0;
 // Cấu hình ngưỡng thay đổi:
 // Chỉ nạp PWM mới xuống motor nếu nó lệch quá 2% so với giá trị cũ
 #define PWM_UPDATE_THRESHOLD  2.0f 
@@ -14,42 +17,34 @@ void motor_speed_pid_step(motor_t *motor,
                           float target_rps,
                           float dt)
 {
-    // 1. Đo tốc độ hiện tại
-    float measured_rps = encoder_get_rps(encoder);
+    float measured = encoder_get_rps(encoder);
+    float pwm;
 
-    // 2. PID tính delta PWM
-    float delta = pid_speed_update(pid,
-                                   target_rps,
-                                   measured_rps,
-                                   dt);
+    int64_t now = esp_timer_get_time();
 
-    // 3. Cập nhật biến tính toán (Internal State)
-    current_pwm += delta;
-
-    // Clamp giá trị tính toán (Giới hạn logic)
-    // Bạn đang giới hạn max 50%, oke.
-    if (current_pwm > 50.0f) current_pwm = 50.0f;
-    if (current_pwm < 0.0f)  current_pwm = 0.0f;
-
-    // 4. LOGIC MỚI: Chỉ apply khi thay đổi đủ lớn
-    // So sánh giá trị muốn đặt (current_pwm) với giá trị đang chạy (last_applied_pwm)
-    if (fabs(current_pwm - (float)last_applied_pwm) >= PWM_UPDATE_THRESHOLD) 
-    {
-        // Chuyển sang số nguyên
-        uint8_t new_pwm_int = (uint8_t)current_pwm;
-        
-        // Gọi hàm điều khiển phần cứng
-        motor_set_speed(motor, new_pwm_int);
-        
-        // Lưu lại trạng thái
-        last_applied_pwm = new_pwm_int;
-
-        printf("UPDATE MOTOR: Target: %.2f, Meas: %.2f, PWM: %d\n", 
-                target_rps, measured_rps, new_pwm_int);
+    // Stop condition
+    if (target_rps <= 0.01f) {
+        pid_speed_reset(pid);
+        motor_set_speed(motor, 0);
+        kick_end_time = 0;
+        return;
     }
-    else 
-    {
-        // Không làm gì cả -> Motor chạy mượt hơn, không bị spam lệnh set_speed liên tục
-        // printf("STABLE: Target: %.2f, Meas: %.2f, Holding PWM: %d\n", target_rps, measured_rps, last_applied_pwm);
+
+    // Kick-start nếu motor đứng
+    if (measured < 0.05f && kick_end_time == 0) {
+        kick_end_time = now + KICK_TIME_MS * 1000;
     }
+
+    if (kick_end_time > now) {
+        pwm = KICK_PWM;
+    } else {
+        kick_end_time = 0;
+        pwm = pid_speed_update(pid, target_rps, measured, dt);
+
+        // Deadzone compensation
+        if (pwm > 0 && pwm < MIN_PWM)
+            pwm = MIN_PWM;
+    }
+
+    motor_set_speed(motor, (uint8_t)pwm);
 }

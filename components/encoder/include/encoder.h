@@ -6,10 +6,13 @@
 #include "esp_err.h"
 
 typedef struct {
-    gpio_num_t pin;           // chân encoder (FC03 OUT)
-    volatile int32_t pulses;  // số xung đã đếm được
-    uint32_t pulses_per_rev;  // số xung / 1 vòng (20)
-    int64_t last_time_us;     // thời điểm cuối đo tốc độ
+    gpio_num_t pin;
+    int32_t pulses_per_rev;
+
+    volatile int32_t pulses;
+    int64_t last_time_us;
+
+    portMUX_TYPE mux;
 } encoder_t;
 
 esp_err_t encoder_init(encoder_t *enc);

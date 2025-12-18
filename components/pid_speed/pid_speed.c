@@ -1,5 +1,11 @@
 #include "pid_speed.h"
 
+
+void pid_speed_reset(pid_speed_t *pid)
+{
+    pid->integral = 0.0f;
+    pid->prev_error = 0.0f;
+}
 void pid_speed_init(pid_speed_t *pid,
                     float kp, float ki, float kd,
                     float out_min, float out_max)
@@ -25,26 +31,23 @@ float pid_speed_update(pid_speed_t *pid,
     // Integral
     pid->integral += error * dt;
 
-    // Anti-windup
-    if (pid->integral > pid->output_max)
-        pid->integral = pid->output_max;
-    else if (pid->integral < pid->output_min)
-        pid->integral = pid->output_min;
+    // Clamp integral (đơn vị: error·time)
+    const float I_LIMIT = 20.0f;   // tune được
+    if (pid->integral > I_LIMIT)  pid->integral = I_LIMIT;
+    if (pid->integral < -I_LIMIT) pid->integral = -I_LIMIT;
 
-    // Derivative
+    // Derivative (chỉ dùng nếu encoder đủ mượt)
     float derivative = (error - pid->prev_error) / dt;
     pid->prev_error = error;
 
-    // PID output = delta PWM
-    float output = pid->kp * error
-                 + pid->ki * pid->integral
-                 + pid->kd * derivative;
+    float output =
+          pid->kp * error
+        + pid->ki * pid->integral
+        + pid->kd * derivative;
 
-    // Clamp output
-    if (output > pid->output_max)
-        output = pid->output_max;
-    else if (output < pid->output_min)
-        output = pid->output_min;
+    // Clamp OUTPUT (PWM %)
+    if (output > pid->output_max) output = pid->output_max;
+    if (output < pid->output_min) output = pid->output_min;
 
     return output;
 }

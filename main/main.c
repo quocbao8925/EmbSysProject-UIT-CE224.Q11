@@ -19,6 +19,19 @@
 #include "motor_speed_control.h"
 #include "i2c_lcd.h"
 
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "nvs_flash.h"
+#include "mqtt_client.h"
+#include "cJSON.h"
+#include "esp_crt_bundle.h"
+
+// Cấu hình Wifi và MQTT Broker
+#define WIFI_SSID      "B17.17"
+#define WIFI_PASS      "12345678"
+#define MQTT_BROKER_URI "mqtts://132401d4e07649638b5a848c17540a65.s1.eu.hivemq.cloud:8883" // Broker public để test
+#define MQTT_TOPIC     "esp32/conveyor/data"
+
 // ================== PIN MAP ==================
 #define IRSENSOR_GPIO   GPIO_NUM_16
 #define IRSENSOR_GPIO1   GPIO_NUM_17
@@ -43,10 +56,12 @@ static const char *TAG = "main";
 // ================== GLOBAL HANDLERS ==================
 static TaskHandle_t button_task_handle = NULL;
 static TaskHandle_t rgb_task_handle    = NULL;
+static esp_mqtt_client_handle_t mqtt_client = NULL;
 bool is_running = false;
 uint8_t counter[3] = {0}; // 0=RED,1=GREEN,2=BLUE
-uint8_t speed_buffer[4] = {0,2,4,6}; // PID speed buffer
-uint8_t speed_idx = 0;
+float speed_buffer[] = {0.8, 1.2, 1.6}; // RPS // PID speed buffer
+uint8_t speed_idx = 1; // index trong speed_buffer
+volatile float g_measured_rps = 0.0f; // tốc độ hiện tại đo từ encoder
 
 ir_sensor_handler ir_handler;
 ir_sensor_handler ir_handler1;
@@ -82,7 +97,7 @@ static void i2c_bus_init(void);
 static void button_init(void);
 static void rgb_task(void *arg);
 static void button_task(void *arg);
-static void IRAM_ATTR button_isr(void *arg);
+static void button_isr(void *arg);
 
 static void conveyor_run_until_ir_or_timeout(uint32_t timeout_ms);
 static int  detect_majority_color_with_buffer(void);
@@ -91,6 +106,104 @@ static int  detect_majority_color_with_buffer(void);
 // Ở đây mình chỉ gọi, không định nghĩa lại.
 extern void servo_open(pca9685_t *dev, uint8_t ch);
 extern void servo_close(pca9685_t *dev, uint8_t ch);
+
+// MQTT client handle
+static void wifi_event_handler(void *arg, esp_event_base_t event_base,
+                               int32_t event_id, void *event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        esp_wifi_connect();
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        esp_wifi_connect();
+        ESP_LOGI(TAG, "Retrying to connect to the AP");
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+    }
+}
+
+static void wifi_init_sta(void)
+{
+    nvs_flash_init(); // Khởi tạo NVS để lưu config wifi
+    esp_netif_init();
+    esp_event_loop_create_default();
+    esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    esp_wifi_init(&cfg);
+
+    esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                        &wifi_event_handler, NULL, NULL);
+    esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                        &wifi_event_handler, NULL, NULL);
+
+    wifi_config_t wifi_config = {
+        .sta = {
+            .ssid = WIFI_SSID,
+            .password = WIFI_PASS,
+            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+        },
+    };
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+    esp_wifi_start();
+}
+
+// --- 2. XỬ LÝ SỰ KIỆN MQTT ---
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+{
+    esp_mqtt_event_handle_t event = event_data;
+    switch ((esp_mqtt_event_id_t)event_id) {
+    case MQTT_EVENT_CONNECTED:
+        ESP_LOGI(TAG, "MQTT Connected");
+        break;
+    case MQTT_EVENT_DISCONNECTED:
+        ESP_LOGI(TAG, "MQTT Disconnected");
+        break;
+    case MQTT_EVENT_ERROR:
+        ESP_LOGE(TAG, "MQTT Error");
+        break;
+    default:
+        break;
+    }
+}
+static void mqtt_app_start(void)
+{
+    esp_mqtt_client_config_t mqtt_cfg = {
+        .broker.address.uri = MQTT_BROKER_URI, // Nhớ có 's' và port 8883
+        .credentials.username = "conveyor",  // User bạn vừa tạo trong Access Management
+        .credentials.authentication.password = "Aa123456", // Pass bạn vừa tạo
+        
+        // Cấu hình chứng chỉ SSL (Quan trọng để không bị lỗi kết nối)
+        .broker.verification.crt_bundle_attach = esp_crt_bundle_attach, 
+    };
+
+    mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
+    esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, mqtt_client);
+    esp_mqtt_client_start(mqtt_client);
+}
+void send_data_to_mqtt(int r, int g, int b, float speed)
+{
+    if (mqtt_client == NULL) return;
+
+    // Tạo JSON object: {"red": 10, "green": 5, "blue": 2, "speed": 2.5}
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "red", r);
+    cJSON_AddNumberToObject(root, "green", g);
+    cJSON_AddNumberToObject(root, "blue", b);
+    cJSON_AddNumberToObject(root, "speed", speed);
+
+    // Chuyển JSON object thành chuỗi (string)
+    char *post_data = cJSON_PrintUnformatted(root);
+
+    // Publish lên topic
+    // tham số: client, topic, data, len, qos, retain
+    esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC, post_data, 0, 1, 0);
+
+    // Giải phóng bộ nhớ (RẤT QUAN TRỌNG ĐỂ KHÔNG BỊ MEMORY LEAK)
+    cJSON_Delete(root);
+    free(post_data);
+}
 
 // ================== I2C INIT (CHỈ 1 LẦN) ==================
 static void i2c_bus_init(void)
@@ -130,6 +243,33 @@ static void button_init(void)
     ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_GPIO, button_isr, NULL));
     ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_GPIO1, button_isr, NULL));
 }
+static void IRAM_ATTR ir_sensor_isr(void *arg)
+{
+    // Lấy số chân GPIO đã kích hoạt ngắt
+    uint32_t gpio_num = (uint32_t)arg;
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    uint32_t notify_value = 0;
+
+    // Xác định xem IR nào được kích hoạt và gán cờ bit tương ứng
+    // Bit 0: Blue (GPIO 16), Bit 1: Green (GPIO 17), Bit 2: Red (GPIO 23)
+    if (gpio_num == IRSENSOR_GPIO) {
+        notify_value = 0x01; 
+    } else if (gpio_num == IRSENSOR_GPIO1) {
+        notify_value = 0x02;
+    } else if (gpio_num == IRSENSOR_GPIO2) {
+        notify_value = 0x04;
+    }
+
+    // Gửi thông báo đến rgb_task để đánh thức nó dậy
+    if (rgb_task_handle != NULL && notify_value != 0) {
+        xTaskNotifyFromISR(rgb_task_handle, notify_value, eSetBits, &xHigherPriorityTaskWoken);
+    }
+
+    // Nếu task được đánh thức có độ ưu tiên cao hơn task hiện tại -> chuyển context ngay
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
+}
 
 static void IRAM_ATTR button_isr(void *arg)
 {
@@ -163,19 +303,19 @@ static void button_task(void *arg)
         if (gpio_get_level(BTN_GPIO1) == 0) {
             speed_idx = (speed_idx + 1) % 4;
             // hiển thị tốc độ hiện tại
-            ESP_LOGI(TAG, "Speed button pressed -> speed set to %u RPS", speed_buffer[speed_idx]);}
+            ESP_LOGI(TAG, "Speed button pressed -> speed set to %f RPS", speed_buffer[speed_idx]);}
     }
 }
-
 // ================== CONVEYOR CONTROL ==================
 static void conveyor_run_until_ir_or_timeout(uint32_t timeout_ms)
 {
     // chạy băng tải
     motor_set_direction(&motorA, MOTOR_DIR_FORWARD);
-    motor_set_speed(&motorA, CONVEYOR_SPEED_PERCENT);
+    motor_set_speed(&motorA, speed_buffer[speed_idx]);
 
     int64_t start = esp_timer_get_time(); // us
     while (1) {
+
         // IR detect -> dừng
         if (gpio_get_level(IRSENSOR_GPIO) == IR_ACTIVE_LEVEL) {
             ESP_LOGI(TAG, "IR detected -> stop conveyor");
@@ -201,7 +341,7 @@ static void conveyor_run_until_ir_or_timeout(uint32_t timeout_ms)
             break;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        //vTaskDelay(period);
     }
 
     // chắc chắn dừng
@@ -283,21 +423,21 @@ static void rgb_task(void *arg)
                 break;
 
             case 1: // GREEN
-                servo_open(&pca, 2);
+                servo_open(&pca, 0);
                 servo_close(&pca, 1);
-                servo_close(&pca, 0);
+                servo_close(&pca, 2);
                 break;
 
             case 2: // BLUE
-                servo_open(&pca, 2);
+                servo_open(&pca, 0);
                 servo_open(&pca, 1);
-                servo_close(&pca, 0);
+                servo_close(&pca, 2);
                 break;
 
             default: // UNKNOWN
-                servo_open(&pca, 0);
-                servo_open(&pca, 1);
                 servo_open(&pca, 2);
+                servo_open(&pca, 1);
+                servo_open(&pca, 0);
                 break;
         }
 
@@ -312,23 +452,22 @@ static void rgb_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
-void motor_pid_task(void *arg)
-{
-    const TickType_t period = pdMS_TO_TICKS(500); // 100 ms
-    const float dt = 0.5f; // 100 ms in seconds
 
+void lcd_task(void *arg)
+{
+    char buffer[32];
+    char buffer1[32];
     while (1) {
-        motor_speed_pid_step(
-            &motorA,
-            &wheel_encoder,
-            &pid,
-            speed_buffer[speed_idx], // use speed from buffer
-            dt
-        );
-        vTaskDelay(period);
+        // Hiển thị thông tin lên LCD
+        lcd_put_cur(0, 0);
+        sprintf(buffer, "SPD: %.2f", encoder_get_rps(&wheel_encoder));
+        lcd_send_string(buffer);
+        lcd_put_cur(1, 0);
+        sprintf(buffer1, "R: %d, G: %d, B: %d", counter[0], counter[1], counter[2]);
+        lcd_send_string(buffer1);
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
-
 // ================== APP MAIN ==================
 void app_main(void)
 {
@@ -342,8 +481,7 @@ void app_main(void)
     i2c_bus_init();
     lcd_init(I2C_PORT); // khởi tạo LCD trên bus đã có
     lcd_clear();
-    lcd_put_cur(0, 0);
-    lcd_send_string("I2C Shared Bus!");
+
 
     // init devices
     ESP_ERROR_CHECK(pca9685_init(&pca));        // PCA init (KHÔNG install i2c bên trong)
@@ -356,74 +494,34 @@ void app_main(void)
 
     motor_set_direction(&motorA, MOTOR_DIR_FORWARD);
     motor_set_speed(&motorA, 0);
-    pid_speed_init(&pid,
-               4.0f,    // Kp  ↓↓↓
-               1.0f,    // Ki  ↓↓↓
-               1.0f,    // Kd  ↑↑
-               -5.0f,   // ΔPWM min
-               5.0f);   // ΔPWM max
+    pid_speed_init(&pid, 15.0f, 3.0f, 0.0f, 0.0f, 100.0f);
     // create tasks (TẠO TASK TRƯỚC, RỒI mới gắn ISR)
-    motor_set_direction(&motorA, MOTOR_DIR_FORWARD);
 
-    xTaskCreate(motor_pid_task, "motor_pid", 2048, NULL, 5, NULL);
     xTaskCreate(button_task, "button_task", 2048, NULL, 10, &button_task_handle);
     xTaskCreate(rgb_task,    "rgb_task",    4096, NULL, 9,  &rgb_task_handle);
-
+    xTaskCreate(lcd_task,    "lcd_task",    2048, NULL, 8,  NULL);
     // init button after task handles are valid
     button_init();
 
     ESP_LOGI(TAG, "System ready. Press button to start classification.");
-    char buffer[32];
-    int counter = 0;
-    while (1) {
-        // Format chuỗi
-        sprintf(buffer, "Counter: %03d", counter);
-        
-        // Hiển thị ra LCD
-        lcd_put_cur(1, 0);
-        lcd_send_string(buffer);
 
-        // Tăng biến đếm
-        counter++;
-        if (counter > 999) counter = 0;
-
-        ESP_LOGI(TAG, "%s", buffer);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-}
-
-// void app_main(void)
-// {
-//     // 1. Khởi tạo LCD (Hàm này đã tự khởi tạo I2C bên trong)
-//     lcd_init();
-//     lcd_clear();
-
-//     lcd_put_cur(0, 0);
-//     lcd_send_string("System Init...");
-//     vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-//     // Xóa dòng thông báo
-//     lcd_put_cur(0, 0);
-//     lcd_send_string("Status: Running");
-
-//     int counter = 0;
+    // ESP_LOGI(TAG, "Connecting to WiFi...");
+    // wifi_init_sta(); 
     
-//     // SỬA LỖI Ở ĐÂY: Tăng kích thước buffer từ 16 lên 32
-//     char buffer[32]; 
+    // ESP_LOGI(TAG, "Starting MQTT...");
+    // mqtt_app_start();
 
-//     while (1) {
-//         // Format chuỗi
-//         sprintf(buffer, "Counter: %03d", counter);
-        
-//         // Hiển thị ra LCD
-//         lcd_put_cur(1, 0);
-//         lcd_send_string(buffer);
+    // // ... (Phần khởi tạo Task giữ nguyên) ...
 
-//         // Tăng biến đếm
-//         counter++;
-//         if (counter > 999) counter = 0;
-
-//         ESP_LOGI(TAG, "%s", buffer);
-//         vTaskDelay(1000 / portTICK_PERIOD_MS);
-//     }
-// }
+    // char buffer[32];
+    // int64_t last_mqtt_time = 0;
+    // while (1) {
+    //     float current_speed = encoder_get_rps(&wheel_encoder);
+    //     if (esp_timer_get_time() - last_mqtt_time > 2000000) {
+    //         send_data_to_mqtt(counter[0], counter[1], counter[2], current_speed);
+    //         last_mqtt_time = esp_timer_get_time();
+    //         ESP_LOGI(TAG, "Data pushed to MQTT");
+    //     }
+    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
+    // }
+}

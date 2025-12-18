@@ -91,6 +91,6 @@ void servo_open(pca9685_t *dev, uint8_t channel)
 }
 void servo_close(pca9685_t *dev, uint8_t channel)
 {
-    pca9685_set_servo_angle(dev, channel, 2); // Close position
+    pca9685_set_servo_angle(dev, channel, 4); // Close position
     vTaskDelay(pdMS_TO_TICKS(100)); // Wait for servo to move
 }   
