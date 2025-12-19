@@ -1,5 +1,4 @@
 // main.c (ESP-IDF)
-
 #include <string.h>
 #include <stdint.h>
 
@@ -19,12 +18,8 @@
 #include "motor_speed_control.h"
 #include "i2c_lcd.h"
 
-#include "esp_wifi.h"
-#include "esp_event.h"
-#include "nvs_flash.h"
-#include "mqtt_client.h"
-#include "cJSON.h"
-#include "esp_crt_bundle.h"
+#include "net_mqtt.h"
+
 
 // Cấu hình Wifi và MQTT Broker
 #define WIFI_SSID      "B17.17"
@@ -47,7 +42,7 @@
 #define I2C_FREQ        100000
 
 // Conveyor settings
-#define CONVEYOR_SPEED_PERCENT  50
+#define CONVEYOR_SPEED_PERCENT  20
 #define CONVEYOR_TIMEOUT_MS     5000
 #define IR_ACTIVE_LEVEL         0      // IR module thường active-low
 
@@ -55,13 +50,14 @@ static const char *TAG = "main";
 
 // ================== GLOBAL HANDLERS ==================
 static TaskHandle_t button_task_handle = NULL;
-static TaskHandle_t rgb_task_handle    = NULL;
-static esp_mqtt_client_handle_t mqtt_client = NULL;
+
 bool is_running = false;
 uint8_t counter[3] = {0}; // 0=RED,1=GREEN,2=BLUE
-float speed_buffer[] = {0.8, 1.2, 1.6}; // RPS // PID speed buffer
-uint8_t speed_idx = 1; // index trong speed_buffer
+float speed_buffer[] = {0, 5.0, 10.0, 15.0}; // RPS // PID speed buffer
+uint8_t speed_idx = 0; // index trong speed_buffer
+uint8_t target_idx = 0;
 volatile float g_measured_rps = 0.0f; // tốc độ hiện tại đo từ encoder
+bool was_stopped = true; // trạng thái trước đó của băng tải
 
 ir_sensor_handler ir_handler;
 ir_sensor_handler ir_handler1;
@@ -91,383 +87,38 @@ pca9685_t pca = {
     .address = 0x40,
     .i2c_freq = I2C_FREQ
 };
+typedef enum { MODE_MANUAL=0, MODE_AUTO=1 } system_mode_t;
 
+volatile system_mode_t g_mode = MODE_MANUAL;
+volatile bool g_start_request = false;   // manual: bấm START để chạy 1 chu kỳ
+typedef enum { COL_RED=0, COL_GREEN=1, COL_BLUE=2, COL_UNKNOWN=3 } color_t;
 // ================== PROTOTYPES ==================
+static void set_servos_for_color(color_t c);
+static void servos_default_open_all(void);
+static uint8_t speed_index_for_manual_color(color_t c);
+// i2c
 static void i2c_bus_init(void);
+// button
 static void button_init(void);
-static void rgb_task(void *arg);
 static void button_task(void *arg);
-static void button_isr(void *arg);
+// ir sensor
+static void wait_ir_release(void);
+static bool check_ir_and_count(void);
+// lcd show counter
+static void lcd_show_counters(void);
+// 2 types of detecting color
+static color_t detect_color_once(void);
+static color_t detect_color_majority(uint8_t samples, uint32_t delay_ms);
+// main function to run the conveyor
+static void logic_task(void *arg);
 
-static void conveyor_run_until_ir_or_timeout(uint32_t timeout_ms);
-static int  detect_majority_color_with_buffer(void);
+void lcd_draw_once(void);
+// pid control for motor
+void motor_control_task(void *arg);
+void speed_monitor_task(void *arg);
 
-// Nếu bạn đã có hàm servo_open/servo_close ở nơi khác thì cứ giữ.
-// Ở đây mình chỉ gọi, không định nghĩa lại.
-extern void servo_open(pca9685_t *dev, uint8_t ch);
-extern void servo_close(pca9685_t *dev, uint8_t ch);
+static void mqtt_publish_task(void *arg);
 
-// MQTT client handle
-static void wifi_event_handler(void *arg, esp_event_base_t event_base,
-                               int32_t event_id, void *event_data)
-{
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        esp_wifi_connect();
-        ESP_LOGI(TAG, "Retrying to connect to the AP");
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
-    }
-}
-
-static void wifi_init_sta(void)
-{
-    nvs_flash_init(); // Khởi tạo NVS để lưu config wifi
-    esp_netif_init();
-    esp_event_loop_create_default();
-    esp_netif_create_default_wifi_sta();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&cfg);
-
-    esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
-                                        &wifi_event_handler, NULL, NULL);
-    esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                                        &wifi_event_handler, NULL, NULL);
-
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = WIFI_SSID,
-            .password = WIFI_PASS,
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-        },
-    };
-    esp_wifi_set_mode(WIFI_MODE_STA);
-    esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
-    esp_wifi_start();
-}
-
-// --- 2. XỬ LÝ SỰ KIỆN MQTT ---
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
-{
-    esp_mqtt_event_handle_t event = event_data;
-    switch ((esp_mqtt_event_id_t)event_id) {
-    case MQTT_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "MQTT Connected");
-        break;
-    case MQTT_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "MQTT Disconnected");
-        break;
-    case MQTT_EVENT_ERROR:
-        ESP_LOGE(TAG, "MQTT Error");
-        break;
-    default:
-        break;
-    }
-}
-static void mqtt_app_start(void)
-{
-    esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = MQTT_BROKER_URI, // Nhớ có 's' và port 8883
-        .credentials.username = "conveyor",  // User bạn vừa tạo trong Access Management
-        .credentials.authentication.password = "Aa123456", // Pass bạn vừa tạo
-        
-        // Cấu hình chứng chỉ SSL (Quan trọng để không bị lỗi kết nối)
-        .broker.verification.crt_bundle_attach = esp_crt_bundle_attach, 
-    };
-
-    mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
-    esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, mqtt_client);
-    esp_mqtt_client_start(mqtt_client);
-}
-void send_data_to_mqtt(int r, int g, int b, float speed)
-{
-    if (mqtt_client == NULL) return;
-
-    // Tạo JSON object: {"red": 10, "green": 5, "blue": 2, "speed": 2.5}
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "red", r);
-    cJSON_AddNumberToObject(root, "green", g);
-    cJSON_AddNumberToObject(root, "blue", b);
-    cJSON_AddNumberToObject(root, "speed", speed);
-
-    // Chuyển JSON object thành chuỗi (string)
-    char *post_data = cJSON_PrintUnformatted(root);
-
-    // Publish lên topic
-    // tham số: client, topic, data, len, qos, retain
-    esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC, post_data, 0, 1, 0);
-
-    // Giải phóng bộ nhớ (RẤT QUAN TRỌNG ĐỂ KHÔNG BỊ MEMORY LEAK)
-    cJSON_Delete(root);
-    free(post_data);
-}
-
-// ================== I2C INIT (CHỈ 1 LẦN) ==================
-static void i2c_bus_init(void)
-{
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = I2C_SDA,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_io_num = I2C_SCL,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = I2C_FREQ,
-        .clk_flags = 0
-    };
-
-    ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &conf));
-
-    // Nếu đã install rồi thì delete trước (tránh “install error”)
-    // (delete fail cũng kệ, vì có thể chưa install)
-    i2c_driver_delete(I2C_PORT);
-
-    ESP_ERROR_CHECK(i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0));
-    ESP_LOGI(TAG, "I2C initialized on SDA=%d SCL=%d port=%d", I2C_SDA, I2C_SCL, I2C_PORT);
-}
-
-// ================== BUTTON ==================
-static void button_init(void)
-{
-    gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << BTN_GPIO) | (1ULL << BTN_GPIO1),
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_NEGEDGE  // nhấn kéo xuống GND
-    };
-    ESP_ERROR_CHECK(gpio_config(&io_conf));
-
-    ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_GPIO, button_isr, NULL));
-    ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_GPIO1, button_isr, NULL));
-}
-static void IRAM_ATTR ir_sensor_isr(void *arg)
-{
-    // Lấy số chân GPIO đã kích hoạt ngắt
-    uint32_t gpio_num = (uint32_t)arg;
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    uint32_t notify_value = 0;
-
-    // Xác định xem IR nào được kích hoạt và gán cờ bit tương ứng
-    // Bit 0: Blue (GPIO 16), Bit 1: Green (GPIO 17), Bit 2: Red (GPIO 23)
-    if (gpio_num == IRSENSOR_GPIO) {
-        notify_value = 0x01; 
-    } else if (gpio_num == IRSENSOR_GPIO1) {
-        notify_value = 0x02;
-    } else if (gpio_num == IRSENSOR_GPIO2) {
-        notify_value = 0x04;
-    }
-
-    // Gửi thông báo đến rgb_task để đánh thức nó dậy
-    if (rgb_task_handle != NULL && notify_value != 0) {
-        xTaskNotifyFromISR(rgb_task_handle, notify_value, eSetBits, &xHigherPriorityTaskWoken);
-    }
-
-    // Nếu task được đánh thức có độ ưu tiên cao hơn task hiện tại -> chuyển context ngay
-    if (xHigherPriorityTaskWoken) {
-        portYIELD_FROM_ISR();
-    }
-}
-
-static void IRAM_ATTR button_isr(void *arg)
-{
-    // ISR gọi trước khi task handle có thể tồn tại -> CHẶN NULL để khỏi assert/reset
-    if (button_task_handle == NULL) return;
-
-    BaseType_t hp = pdFALSE;
-    xTaskNotifyFromISR(button_task_handle, 0x01, eSetBits, &hp);
-    if (hp) portYIELD_FROM_ISR();
-}
-
-static void button_task(void *arg)
-{
-    uint32_t bits = 0;
-
-    while (1) {
-        // chờ ISR notify
-        xTaskNotifyWait(0, UINT32_MAX, &bits, portMAX_DELAY);
-
-        // debounce mềm
-        vTaskDelay(pdMS_TO_TICKS(30));
-        if (gpio_get_level(BTN_GPIO) == 0  && !is_running) {
-            ESP_LOGI(TAG, "Button pressed -> start classification");
-
-            // notify rgb_task bắt đầu 1 lượt phân loại
-            if (rgb_task_handle) {
-                xTaskNotify(rgb_task_handle, 0x01, eSetBits);
-                is_running = true;
-            }
-        }
-        if (gpio_get_level(BTN_GPIO1) == 0) {
-            speed_idx = (speed_idx + 1) % 4;
-            // hiển thị tốc độ hiện tại
-            ESP_LOGI(TAG, "Speed button pressed -> speed set to %f RPS", speed_buffer[speed_idx]);}
-    }
-}
-// ================== CONVEYOR CONTROL ==================
-static void conveyor_run_until_ir_or_timeout(uint32_t timeout_ms)
-{
-    // chạy băng tải
-    motor_set_direction(&motorA, MOTOR_DIR_FORWARD);
-    motor_set_speed(&motorA, speed_buffer[speed_idx]);
-
-    int64_t start = esp_timer_get_time(); // us
-    while (1) {
-
-        // IR detect -> dừng
-        if (gpio_get_level(IRSENSOR_GPIO) == IR_ACTIVE_LEVEL) {
-            ESP_LOGI(TAG, "IR detected -> stop conveyor");
-            counter[2]++; // BLUE
-            break;
-        }
-        if (gpio_get_level(IRSENSOR_GPIO1) == IR_ACTIVE_LEVEL) {
-            ESP_LOGI(TAG, "IR1 detected -> stop conveyor");
-            counter[1]++; // GREEN
-            break;
-        }
-        if (gpio_get_level(IRSENSOR_GPIO2) == IR_ACTIVE_LEVEL) {
-            ESP_LOGI(TAG, "IR2 detected -> stop conveyor");
-            counter[0]++; // RED
-            break;
-        }
-
-
-        // timeout -> dừng
-        int64_t now = esp_timer_get_time();
-        if ((now - start) >= (int64_t)timeout_ms * 1000) {
-            ESP_LOGW(TAG, "Timeout %ums -> stop conveyor", timeout_ms);
-            break;
-        }
-
-        //vTaskDelay(period);
-    }
-
-    // chắc chắn dừng
-    motor_set_speed(&motorA, 0);
-}
-
-// ================== COLOR DETECT WITH BUFFER (GIỮ KIỂU CŨ) ==================
-// return: 0=RED, 1=GREEN, 2=BLUE, 3=UNKNOWN
-static int detect_majority_color_with_buffer(void)
-{
-    int8_t offsetr = 53, offsetg = 97, offsetb = 87;
-    uint8_t threshold = 3;
-
-    uint8_t r, g, b;
-    uint8_t buffer[4] = {0};
-    uint8_t idx = 0;
-
-    while (1) {
-        tcs34725_reader(&tcs_handler);
-        get_rgb_values(&tcs_handler, &r, &g, &b);
-
-        ESP_LOGI(TAG, "Raw RGB: R=%u G=%u B=%u", r, g, b);
-
-        // adjust
-        r = (r > offsetr) ? (r - offsetr) : 0;
-        g = (g > offsetg) ? (g - offsetg) : 0;
-        b = (b > offsetb) ? (b - offsetb) : 0;
-
-        // vote
-        if (r > g && r > b && r > threshold) {
-            buffer[0]++;
-        } else if (g > r && g > b && g > threshold) {
-            buffer[1]++;
-        } else if (b > r && b > g && b > threshold) {
-            buffer[2]++;
-        } else {
-            buffer[3]++;
-        }
-
-        idx++;
-        if (idx >= 10) {
-            // majority
-            int max_idx = 0;
-            for (int i = 1; i < 4; i++) {
-                if (buffer[i] > buffer[max_idx]) max_idx = i;
-            }
-
-            ESP_LOGI(TAG, "Majority color: %s (R=%u G=%u B=%u U=%u)",
-                     (max_idx==0)?"RED":(max_idx==1)?"GREEN":(max_idx==2)?"BLUE":"UNKNOWN",
-                     buffer[0], buffer[1], buffer[2], buffer[3]);
-
-            return max_idx;
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
-}
-
-// ================== RGB TASK (BẤM NÚT MỚI CHẠY) ==================
-static void rgb_task(void *arg)
-{
-    uint32_t bits = 0;
-
-    while (1) {
-        // chờ “start classification” từ button_task
-        xTaskNotifyWait(0, UINT32_MAX, &bits, portMAX_DELAY);
-        vTaskDelay(pdMS_TO_TICKS(100)); //
-
-        // 1) detect màu (buffer)
-        int color = detect_majority_color_with_buffer();
-
-        // 2) mở/đóng cổng theo màu (bạn đã có code sẵn servo_open/close)
-
-        switch (color) {
-            case 0: // RED
-                servo_close(&pca, 0);
-                servo_close(&pca, 1);
-                servo_close(&pca, 2);
-                break;
-
-            case 1: // GREEN
-                servo_open(&pca, 0);
-                servo_close(&pca, 1);
-                servo_close(&pca, 2);
-                break;
-
-            case 2: // BLUE
-                servo_open(&pca, 0);
-                servo_open(&pca, 1);
-                servo_close(&pca, 2);
-                break;
-
-            default: // UNKNOWN
-                servo_open(&pca, 2);
-                servo_open(&pca, 1);
-                servo_open(&pca, 0);
-                break;
-        }
-
-        // 3) chạy băng tải, tối đa 5s hoặc IR detect thì dừng
-        conveyor_run_until_ir_or_timeout(CONVEYOR_TIMEOUT_MS);
-        
-        // 4) đảm bảo dừng băng tải (double safety)
-        motor_set_speed(&motorA, 0);
-        is_running = false;
-        ESP_LOGI(TAG, "Classification cycle finished.\n");
-        ESP_LOGI(TAG, "Counters: RED=%d GREEN=%d BLUE=%d", counter[0], counter[1], counter[2]);
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-}
-
-void lcd_task(void *arg)
-{
-    char buffer[32];
-    char buffer1[32];
-    while (1) {
-        // Hiển thị thông tin lên LCD
-        lcd_put_cur(0, 0);
-        sprintf(buffer, "SPD: %.2f", encoder_get_rps(&wheel_encoder));
-        lcd_send_string(buffer);
-        lcd_put_cur(1, 0);
-        sprintf(buffer1, "R: %d, G: %d, B: %d", counter[0], counter[1], counter[2]);
-        lcd_send_string(buffer1);
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
-}
 // ================== APP MAIN ==================
 void app_main(void)
 {
@@ -494,34 +145,382 @@ void app_main(void)
 
     motor_set_direction(&motorA, MOTOR_DIR_FORWARD);
     motor_set_speed(&motorA, 0);
-    pid_speed_init(&pid, 15.0f, 3.0f, 0.0f, 0.0f, 100.0f);
-    // create tasks (TẠO TASK TRƯỚC, RỒI mới gắn ISR)
+    pid_speed_init(&pid,
+        25.0f,   // Kp
+        8.0f,    // Ki
+        0.0f,    // Kd (0)
+       -10.0f,
+        10.0f
+    );
+    // testing push data to MQTT
+    wifi_init_sta("Bao Phuc", "08092005");
+    mqtt_app_start(
+        "mqtts://132401d4e07649638b5a848c17540a65.s1.eu.hivemq.cloud:8883",
+        "conveyor",
+        "Aa123456",
+        "esp32/conveyor/data"
+    );
 
+    // create tasks (TẠO TASK TRƯỚC, RỒI mới gắn ISR)
+    xTaskCreate(speed_monitor_task, "speed_monitor", 2048, NULL, 3, NULL);
     xTaskCreate(button_task, "button_task", 2048, NULL, 10, &button_task_handle);
-    xTaskCreate(rgb_task,    "rgb_task",    4096, NULL, 9,  &rgb_task_handle);
-    xTaskCreate(lcd_task,    "lcd_task",    2048, NULL, 8,  NULL);
-    // init button after task handles are valid
+    xTaskCreate(mqtt_publish_task, "mqtt_pub", 4096, NULL, 2, NULL);
+    // Init button sau khi có task handle
     button_init();
+    lcd_clear();
+    lcd_draw_once(); // khoi tao ki tu tren LCD
+    // Tạo các task nặng/quan trọng và ghim vào Core (Tùy chọn, nhưng tốt cho hiệu năng)
+    // Core 0 thường chạy Wifi/BT, Core 1 chạy App. 
+    // Nếu bạn dùng Wifi nhiều, nên để rgb_task sang Core 1 cùng với LCD để tránh xung đột ngắt Wifi.
+    xTaskCreatePinnedToCore(logic_task, "logic_task", 4096, NULL, 8, NULL, 1);
+    xTaskCreatePinnedToCore(motor_control_task, "motor_ctrl", 4096, NULL, 5, NULL, 0);
+    
 
     ESP_LOGI(TAG, "System ready. Press button to start classification.");
-
-    // ESP_LOGI(TAG, "Connecting to WiFi...");
-    // wifi_init_sta(); 
     
-    // ESP_LOGI(TAG, "Starting MQTT...");
-    // mqtt_app_start();
+}
+static void set_servos_for_color(color_t c)
+{
+    switch (c) {
+        case COL_RED:
+            servo_close(&pca, 0);
+            servo_close(&pca, 1);
+            servo_close(&pca, 2);
+            break;
+        case COL_GREEN:
+            servo_open(&pca, 0);
+            servo_close(&pca, 1);
+            servo_close(&pca, 2);
+            break;
+        case COL_BLUE:
+            servo_open(&pca, 0);
+            servo_open(&pca, 1);
+            servo_close(&pca, 2);
+            break;
+        default: // unknown
+            servo_open(&pca, 0);
+            servo_open(&pca, 1);
+            servo_open(&pca, 2);
+            break;
+    }
+}
+static void servos_default_open_all(void)
+{
+    servo_open(&pca, 0);
+    servo_open(&pca, 1);
+    servo_open(&pca, 2);
+}
+static uint8_t speed_index_for_manual_color(color_t c)
+{
+    switch (c) {
+        case COL_RED:   return 1; // 5
+        case COL_GREEN: return 2; // 10
+        case COL_BLUE:  return 2; // 10
+        default:        return 3; // 15
+    }
+}
 
-    // // ... (Phần khởi tạo Task giữ nguyên) ...
+// ================== I2C INIT (CHỈ 1 LẦN) ==================
+static void i2c_bus_init(void)
+{
+    i2c_config_t conf = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = I2C_SDA,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_io_num = I2C_SCL,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = I2C_FREQ,
+        .clk_flags = 0
+    };
 
-    // char buffer[32];
-    // int64_t last_mqtt_time = 0;
-    // while (1) {
-    //     float current_speed = encoder_get_rps(&wheel_encoder);
-    //     if (esp_timer_get_time() - last_mqtt_time > 2000000) {
-    //         send_data_to_mqtt(counter[0], counter[1], counter[2], current_speed);
-    //         last_mqtt_time = esp_timer_get_time();
-    //         ESP_LOGI(TAG, "Data pushed to MQTT");
-    //     }
-    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
-    // }
+    ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &conf));
+
+    // Nếu đã install rồi thì delete trước (tránh “install error”)
+    // (delete fail cũng kệ, vì có thể chưa install)
+    i2c_driver_delete(I2C_PORT);
+
+    ESP_ERROR_CHECK(i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0));
+    ESP_LOGI(TAG, "I2C initialized on SDA=%d SCL=%d port=%d", I2C_SDA, I2C_SCL, I2C_PORT);
+}
+static void IRAM_ATTR button_isr(void *arg)
+{
+    // ISR gọi trước khi task handle có thể tồn tại -> CHẶN NULL để khỏi assert/reset
+    if (button_task_handle == NULL) return;
+
+    BaseType_t hp = pdFALSE;
+    xTaskNotifyFromISR(button_task_handle, 0x01, eSetBits, &hp);
+    if (hp) portYIELD_FROM_ISR();
+}
+// ================== BUTTON ==================
+static void button_init(void)
+{
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << BTN_GPIO) | (1ULL << BTN_GPIO1),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_NEGEDGE  // nhấn kéo xuống GND
+    };
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+
+    ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_GPIO, button_isr, NULL));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_GPIO1, button_isr, NULL));
+}
+
+static void wait_ir_release(void)
+{
+    // chờ tất cả IR về inactive
+    while (gpio_get_level(IRSENSOR_GPIO)  == IR_ACTIVE_LEVEL ||
+           gpio_get_level(IRSENSOR_GPIO1) == IR_ACTIVE_LEVEL ||
+           gpio_get_level(IRSENSOR_GPIO2) == IR_ACTIVE_LEVEL) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}  
+static void button_task(void *arg)
+{
+    uint32_t bits = 0;
+
+    while (1) {
+        xTaskNotifyWait(0, UINT32_MAX, &bits, portMAX_DELAY);
+        vTaskDelay(pdMS_TO_TICKS(30)); // debounce
+
+        // MODE toggle
+        if (gpio_get_level(BTN_GPIO1) == 0) {
+            g_mode = (g_mode == MODE_MANUAL) ? MODE_AUTO : MODE_MANUAL;
+            ESP_LOGI(TAG, "MODE -> %s", (g_mode==MODE_MANUAL)?"MANUAL":"AUTO");
+
+            // khi đổi mode: reset mọi thứ về safe
+            g_start_request = false;
+            is_running = false;
+            target_idx = 0;
+            servos_default_open_all();
+            wait_ir_release();
+            continue;
+        }
+
+        // START manual
+        if (gpio_get_level(BTN_GPIO) == 0) {
+            if (g_mode == MODE_MANUAL && !is_running) {
+                g_start_request = true;
+                ESP_LOGI(TAG, "START requested (MANUAL)");
+            } else {
+                ESP_LOGI(TAG, "START ignored (AUTO or running)");
+            }
+        }
+    }
+}
+static bool check_ir_and_count(void)
+{
+    if (gpio_get_level(IRSENSOR_GPIO) == IR_ACTIVE_LEVEL) {
+        counter[2]++; // BLUE
+        ESP_LOGI(TAG, "IR BLUE hit");
+        return true;
+    }
+    if (gpio_get_level(IRSENSOR_GPIO1) == IR_ACTIVE_LEVEL) {
+        counter[1]++; // GREEN
+        ESP_LOGI(TAG, "IR GREEN hit");
+        return true;
+    }
+    if (gpio_get_level(IRSENSOR_GPIO2) == IR_ACTIVE_LEVEL) {
+        counter[0]++; // RED
+        ESP_LOGI(TAG, "IR RED hit");
+        return true;
+    }
+    return false;
+}
+ 
+static void lcd_show_counters(void)
+{
+    char buffer1[32];
+    lcd_put_cur(1, 0);
+    sprintf(buffer1, "R:%d G:%d B:%d   ", counter[0], counter[1], counter[2]);
+    lcd_send_string(buffer1);
+}
+// ================== COLOR DETECT WITH BUFFER (GIỮ KIỂU CŨ) ==================
+// return: 0=RED, 1=GREEN, 2=BLUE, 3=UNKNOWN
+static color_t detect_color_once(void)
+{
+    int8_t offsetr = 53, offsetg = 97, offsetb = 87;
+    uint8_t threshold = 3;
+
+    uint8_t r, g, b;
+    tcs34725_reader(&tcs_handler);
+    get_rgb_values(&tcs_handler, &r, &g, &b);
+
+    // adjust
+    r = (r > offsetr) ? (r - offsetr) : 0;
+    g = (g > offsetg) ? (g - offsetg) : 0;
+    b = (b > offsetb) ? (b - offsetb) : 0;
+
+    if (r > g && r > b && r > threshold) return COL_RED;
+    if (g > r && g > b && g > threshold) return COL_GREEN;
+    if (b > r && b > g && b > threshold) return COL_BLUE;
+    return COL_UNKNOWN;
+}
+static color_t detect_color_majority(uint8_t samples, uint32_t delay_ms)
+{
+    uint8_t buf[4] = {0};
+
+    for (uint8_t i = 0; i < samples; i++) {
+        color_t c = detect_color_once();
+        buf[(int)c]++;
+
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+    }
+
+    int max_i = 0;
+    for (int i = 1; i < 4; i++) {
+        if (buf[i] > buf[max_i]) max_i = i;
+    }
+
+    ESP_LOGI(TAG, "Color vote: R=%u G=%u B=%u U=%u -> %d",
+             buf[0], buf[1], buf[2], buf[3], max_i);
+
+    return (color_t)max_i;
+}
+
+static void logic_task(void *arg)
+{
+    bool auto_gate_active = false; // AUTO: đang đóng/mở theo màu hay đang default?
+    servos_default_open_all();
+
+    while (1) {
+        if (g_mode == MODE_MANUAL) {
+
+            // MANUAL: motor dừng chờ start
+            target_idx = 0;
+            is_running = false;
+            auto_gate_active = false;
+            servos_default_open_all();
+
+            if (!g_start_request) {
+                vTaskDelay(pdMS_TO_TICKS(20));
+                continue;
+            }
+            g_start_request = false;
+
+            // 1) nhìn màu nhiều lần khi motor đang dừng
+            color_t c = detect_color_majority(10, 50);
+
+            // 2) set servo theo màu
+            set_servos_for_color(c);
+
+            // 3) set tốc độ theo màu
+            target_idx = speed_index_for_manual_color(c);
+
+            // 4) chạy băng tải (PID task sẽ tự chạy theo target_idx)
+            is_running = true;
+            int64_t start = esp_timer_get_time();
+
+            while (1) {
+                if (check_ir_and_count()) {
+                    wait_ir_release();
+                    break;
+                }
+                int64_t now = esp_timer_get_time();
+                if ((now - start) >= (int64_t)CONVEYOR_TIMEOUT_MS * 1000) {
+                    ESP_LOGW(TAG, "MANUAL timeout");
+                    break;
+                }
+                vTaskDelay(pdMS_TO_TICKS(5));
+            }
+
+            // 5) stop + reset
+            is_running = false;
+            target_idx = 0;
+            servos_default_open_all();
+
+        } else {
+            // AUTO MODE
+            is_running = true;
+            target_idx = 1; // 5 rps luôn chạy
+
+            // default servo = open all cho unknown
+            if (!auto_gate_active) servos_default_open_all();
+
+            // Nếu đang default -> nhìn nhanh 1-2 lần để quyết định gate cho vật mới
+            if (!auto_gate_active) {
+                color_t c = detect_color_majority(2, 10);
+                if (c != COL_UNKNOWN) {
+                    set_servos_for_color(c);
+                    auto_gate_active = true;
+                }
+            }
+
+            // Nếu IR hit -> trả servo về default open all
+            if (check_ir_and_count()) {
+                wait_ir_release();
+                servos_default_open_all();
+                auto_gate_active = false;
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(20));
+        }
+        lcd_show_counters();
+    }
+}
+
+void lcd_draw_once()
+{
+    char buffer[32];
+    char buffer1[32];
+    lcd_clear();
+        // Hiển thị thông tin lên LCD
+    lcd_put_cur(0, 0);
+    sprintf(buffer, "SP:%5.2f/%5.2f", g_measured_rps, speed_buffer[speed_idx]);
+    lcd_send_string(buffer);
+
+    lcd_put_cur(1, 0);
+    sprintf(buffer1, "R:%d G:%d B:%d   ",
+            counter[0], counter[1], counter[2]);
+    lcd_send_string(buffer1);
+}
+
+void motor_control_task(void *arg)
+{
+    while (1) {
+        float target_rps = speed_buffer[target_idx];
+
+        // đo tốc độ 1 nơi duy nhất
+        float measured = encoder_get_rps(&wheel_encoder);
+        g_measured_rps = measured;
+        was_stopped = (measured < 0.1f);
+
+        if (!is_running && target_rps < 0.05f) {
+            pid_speed_reset(&pid);
+            motor_set_speed(&motorA, 0);
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+
+        // NOTE: motor_speed_pid_step của bri đang đọc encoder bên trong.
+        // Khuyến nghị: sửa motor_speed_pid_step để nhận measured (đỡ đọc 2 lần).
+        // Nếu chưa sửa, vẫn chạy được, nhưng tốt nhất là sửa như ghi chú phía dưới.
+
+        motor_speed_pid_step(&motorA, &wheel_encoder, &pid, target_rps, CONTROL_DT, was_stopped);
+
+        vTaskDelay(pdMS_TO_TICKS(CONTROL_DT_MS));
+    }
+}
+void speed_monitor_task(void *arg)
+{
+    char buffer[32];
+    while (1) {
+        float rps = g_measured_rps;
+        ESP_LOGI("SPEED", "Measured speed: %.3f RPS", rps);
+
+        lcd_put_cur(0, 0);
+        sprintf(buffer, "SP:%5.2f/%5.2f", rps, speed_buffer[target_idx]);
+        lcd_send_string(buffer);
+
+        vTaskDelay(pdMS_TO_TICKS(300));
+    }
+}
+static void mqtt_publish_task(void *arg)
+{
+    while (1) {
+        // counter[0..2] + speed
+        send_data_to_mqtt(counter[0], counter[1], counter[2], g_measured_rps);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
 }

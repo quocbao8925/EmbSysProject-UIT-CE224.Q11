@@ -652,6 +652,13 @@ D:/Progs/ESP/projects/test_htn/build/esp-idf/json/CMakeFiles/list_install_compon
 D:/Progs/ESP/projects/test_htn/build/esp-idf/json/CMakeFiles/install.dir
 D:/Progs/ESP/projects/test_htn/build/esp-idf/json/CMakeFiles/install/local.dir
 D:/Progs/ESP/projects/test_htn/build/esp-idf/json/CMakeFiles/install/strip.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/net_mqtt/CMakeFiles/__idf_net_mqtt.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/net_mqtt/CMakeFiles/edit_cache.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/net_mqtt/CMakeFiles/rebuild_cache.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/net_mqtt/CMakeFiles/list_install_components.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/net_mqtt/CMakeFiles/install.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/net_mqtt/CMakeFiles/install/local.dir
+D:/Progs/ESP/projects/test_htn/build/esp-idf/net_mqtt/CMakeFiles/install/strip.dir
 D:/Progs/ESP/projects/test_htn/build/esp-idf/espressif__led_strip/CMakeFiles/__idf_espressif__led_strip.dir
 D:/Progs/ESP/projects/test_htn/build/esp-idf/espressif__led_strip/CMakeFiles/edit_cache.dir
 D:/Progs/ESP/projects/test_htn/build/esp-idf/espressif__led_strip/CMakeFiles/rebuild_cache.dir

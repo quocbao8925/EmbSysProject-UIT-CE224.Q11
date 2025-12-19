@@ -58,13 +58,13 @@ void tcs34725_deinit(void)
     i2c_driver_delete(I2C_MASTER_NUM);
     ESP_LOGI(TAG, "TCS34725 deinitialized");
 }
-static esp_err_t tcs_read(tcs34725_handler *handler, uint8_t reg, uint8_t *data, size_t len)
+esp_err_t tcs_read(tcs34725_handler *handler, uint8_t reg, uint8_t *data, size_t len)
 {
     uint8_t cmd = TCS_CMD_BIT | TCS_CMD_AUTO_INC | reg; //
     return i2c_master_write_read_device(I2C_MASTER_NUM, TCS34725_ADDR,
                                         &cmd, 1, data, len, pdMS_TO_TICKS(1000));
 }
-static esp_err_t tcs_write(uint8_t reg, uint8_t value)
+esp_err_t tcs_write(uint8_t reg, uint8_t value)
 {
     uint8_t data[2] = { TCS_CMD_BIT | reg, value };
     return i2c_master_write_to_device(I2C_MASTER_NUM, TCS34725_ADDR,

@@ -130,6 +130,9 @@ D:/Progs/ESP/projects/test_htn/build/esp-idf/tcp_transport/libtcp_transport.a
 D:/Progs/ESP/projects/test_htn/build/esp-idf/mqtt/libmqtt.a
 D:/Progs/ESP/projects/test_htn/build/esp-idf/tcp_transport/libtcp_transport.a
 D:/Progs/ESP/projects/test_htn/build/esp-idf/json/libjson.a
+D:/Progs/ESP/projects/test_htn/build/esp-idf/net_mqtt/libnet_mqtt.a
+D:/Progs/ESP/projects/test_htn/build/esp-idf/mqtt/libmqtt.a
+D:/Progs/ESP/projects/test_htn/build/esp-idf/json/libjson.a
 D:/Progs/ESP/projects/test_htn/build/esp-idf/espressif__led_strip/libespressif__led_strip.a
 D:/Progs/ESP/projects/test_htn/build/esp-idf/main/libmain.a
 D:/Progs/ESP/projects/test_htn/build/esp-idf/ir_sensor/libir_sensor.a
@@ -137,7 +140,6 @@ D:/Progs/ESP/projects/test_htn/build/esp-idf/tcs34725/libtcs34725.a
 D:/Progs/ESP/projects/test_htn/build/esp-idf/pca9685/libpca9685.a
 D:/Progs/ESP/projects/test_htn/build/esp-idf/motor_speed_control/libmotor_speed_control.a
 D:/Progs/ESP/projects/test_htn/build/esp-idf/i2c_lcd/libi2c_lcd.a
-D:/Progs/ESP/projects/test_htn/build/esp-idf/mqtt/libmqtt.a
-D:/Progs/ESP/projects/test_htn/build/esp-idf/json/libjson.a
+D:/Progs/ESP/projects/test_htn/build/esp-idf/net_mqtt/libnet_mqtt.a
 D:/Progs/ESP/projects/test_htn/build/esp-idf/espressif__led_strip/libespressif__led_strip.a
 D:/Progs/ESP/projects/test_htn/build/esp-idf/esp-idf-lib__i2cdev/libesp-idf-lib__i2cdev.a

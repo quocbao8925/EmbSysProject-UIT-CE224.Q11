@@ -1,0 +1,33 @@
+Command: cmake -G Ninja -DPYTHON_DEPS_CHECKED=1 -DPYTHON=d:\Progs\ESP\.espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe -DESP_PLATFORM=1 -DCCACHE_ENABLE=1 D:\Progs\ESP\projects\test_htn
+-- Found Git: D:/Progs/ESP/.espressif/tools/idf-git/2.39.2/cmd/git.exe (found version "2.39.2.windows.1")
+-- Minimal build - ON
+-- ccache will be used for faster recompilation
+-- The C compiler identification is GNU 14.2.0
+-- The CXX compiler identification is GNU 14.2.0
+-- The ASM compiler identification is GNU
+-- Found assembler: D:/Progs/ESP/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin/xtensa-esp32-elf-gcc.exe
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: D:/Progs/ESP/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin/xtensa-esp32-elf-gcc.exe - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: D:/Progs/ESP/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin/xtensa-esp32-elf-g++.exe - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Building ESP-IDF components for target esp32
+NOTICE: 
+Following dependencies have new versions available:
+Dependency "espressif/led_strip": "3.0.1~1" -> "3.0.2"
+Consider running "idf.py update-dependencies" to update your lock file.
+NOTICE: Processing 5 dependencies:
+NOTICE: [1/5] esp-idf-lib/esp_idf_lib_helpers (1.3.10)
+NOTICE: [2/5] esp-idf-lib/i2cdev (2.0.8)
+NOTICE: [3/5] esp-idf-lib/pca9685 (1.0.7)
+NOTICE: [4/5] espressif/led_strip (3.0.1~1)
+NOTICE: [5/5] idf (5.5.1)
+-- i2cdev: ESP-IDF v5.5 detected, using new i2c_master driver
+-- i2cdev: Compiling with new I2C master driver (i2cdev.c)
+NOTICE: pca9685 overrides esp-idf-lib__pca9685 since "project_components" type got higher priority than "project_managed_components"
+-- Configuring incomplete, errors occurred!

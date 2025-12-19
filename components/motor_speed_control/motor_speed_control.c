@@ -1,50 +1,66 @@
 #include "motor_speed_control.h"
-#include <math.h> // Để dùng hàm fabs (trị tuyệt đối số thực)
+#include <math.h>
 
-static float current_pwm = 0.0f;       // Giá trị tính toán nội bộ của PID
-static uint8_t last_applied_pwm = 0;   // Giá trị thực tế đã nạp xuống motor
-#define MIN_PWM      55.0f   // deadzone L298N (tune)
-#define KICK_PWM    100.0f
-#define KICK_TIME_MS 150
+static float current_pwm = 0.0f;
+
+#define MIN_PWM        20.0f   // deadzone thực tế
+#define MAX_PWM        100.0f
+#define KICK_PWM       45.0f
+#define KICK_TIME_MS   80
+#define PWM_SLEW_STEP  2.0f    // % mỗi dt (rất quan trọng)
+
 static int64_t kick_end_time = 0;
-// Cấu hình ngưỡng thay đổi:
-// Chỉ nạp PWM mới xuống motor nếu nó lệch quá 2% so với giá trị cũ
-#define PWM_UPDATE_THRESHOLD  2.0f 
+
+static float clampf(float x, float lo, float hi)
+{
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
+}
 
 void motor_speed_pid_step(motor_t *motor,
                           encoder_t *encoder,
                           pid_speed_t *pid,
                           float target_rps,
-                          float dt)
+                          float dt, bool was_stopped)
 {
     float measured = encoder_get_rps(encoder);
-    float pwm;
 
     int64_t now = esp_timer_get_time();
 
-    // Stop condition
-    if (target_rps <= 0.01f) {
+    /* ===== STOP ===== */
+    if (target_rps < 0.05f) {
         pid_speed_reset(pid);
+        current_pwm = 0;
         motor_set_speed(motor, 0);
         kick_end_time = 0;
         return;
     }
 
-    // Kick-start nếu motor đứng
-    if (measured < 0.05f && kick_end_time == 0) {
+    /* ===== KICK START ===== */
+    if (was_stopped && target_rps > 0.05f) {
         kick_end_time = now + KICK_TIME_MS * 1000;
+        was_stopped = false;
     }
 
     if (kick_end_time > now) {
-        pwm = KICK_PWM;
+        current_pwm = KICK_PWM;
     } else {
         kick_end_time = 0;
-        pwm = pid_speed_update(pid, target_rps, measured, dt);
 
-        // Deadzone compensation
-        if (pwm > 0 && pwm < MIN_PWM)
-            pwm = MIN_PWM;
+        /* ===== PI: delta PWM ===== */
+        float delta = pid_speed_update(pid, target_rps, measured, dt);
+        /* Slew rate limit */
+        delta = clampf(delta, -PWM_SLEW_STEP, PWM_SLEW_STEP);
+
+        current_pwm += delta;
+
+        /* Deadzone */
+        if (current_pwm > 0 && current_pwm < MIN_PWM)
+            current_pwm = MIN_PWM;
+
+        current_pwm = clampf(current_pwm, 0, MAX_PWM);
     }
 
-    motor_set_speed(motor, (uint8_t)pwm);
+    motor_set_speed(motor, (uint8_t)current_pwm);
 }

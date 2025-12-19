@@ -2,7 +2,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
 
-static encoder_t *s_encoder_ref = NULL;
+//static encoder_t *s_encoder_ref = NULL;
 
 static void IRAM_ATTR encoder_isr_handler(void *arg)
 {
@@ -43,7 +43,7 @@ float encoder_get_rps(encoder_t *enc)
     enc->pulses = 0;
     portEXIT_CRITICAL(&enc->mux);
 
-    float rev = (float)pulses / (float)enc->pulses_per_rev;
+    float rev = (float)pulses / ((float)enc->pulses_per_rev);
     return rev / dt;
 }
 

@@ -1,6 +1,6 @@
 #include "pid_speed.h"
 
-
+static float last_delta = 1;
 void pid_speed_reset(pid_speed_t *pid)
 {
     pid->integral = 0.0f;
@@ -28,26 +28,14 @@ float pid_speed_update(pid_speed_t *pid,
 {
     float error = target - measured;
 
-    // Integral
     pid->integral += error * dt;
-
-    // Clamp integral (đơn vị: error·time)
-    const float I_LIMIT = 20.0f;   // tune được
-    if (pid->integral > I_LIMIT)  pid->integral = I_LIMIT;
-    if (pid->integral < -I_LIMIT) pid->integral = -I_LIMIT;
-
-    // Derivative (chỉ dùng nếu encoder đủ mượt)
-    float derivative = (error - pid->prev_error) / dt;
-    pid->prev_error = error;
+    if (pid->integral > 20.0f) pid->integral = 20.0f;
+    if (pid->integral < -20.0f) pid->integral = -20.0f;
 
     float output =
           pid->kp * error
-        + pid->ki * pid->integral
-        + pid->kd * derivative;
-
-    // Clamp OUTPUT (PWM %)
-    if (output > pid->output_max) output = pid->output_max;
-    if (output < pid->output_min) output = pid->output_min;
-
-    return output;
+        + pid->ki * pid->integral;
+    output = (output*0.8 + last_delta*0.2);
+    last_delta = output;
+    return output;   // ΔPWM
 }

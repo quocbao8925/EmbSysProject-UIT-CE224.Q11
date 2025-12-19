@@ -43,8 +43,8 @@ typedef struct {
 void i2c_address_scan(void);
 void tcs34725_init(tcs34725_handler *handler);
 void tcs34725_deinit(void);
-static esp_err_t tcs_write(uint8_t reg, uint8_t value);
-static esp_err_t tcs_read(tcs34725_handler *handler, uint8_t reg, uint8_t *data, size_t len);
+esp_err_t tcs_write(uint8_t reg, uint8_t value);
+esp_err_t tcs_read(tcs34725_handler *handler, uint8_t reg, uint8_t *data, size_t len);
 void tcs34725_reader(tcs34725_handler *handler);
 void get_rgb_values(tcs34725_handler *handler, uint8_t *r, uint8_t *g, uint8_t *b);
 #endif
