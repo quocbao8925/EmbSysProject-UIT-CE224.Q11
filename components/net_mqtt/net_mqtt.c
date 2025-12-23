@@ -120,7 +120,7 @@ esp_err_t mqtt_app_start(const char *broker_uri,
     return ESP_OK;
 }
 
-void send_data_to_mqtt(int r, int g, int b, float speed)
+void send_data_to_mqtt(int r, int g, int b)
 {
     if (mqtt_client == NULL || s_topic == NULL) return;
 
@@ -128,7 +128,6 @@ void send_data_to_mqtt(int r, int g, int b, float speed)
     cJSON_AddNumberToObject(root, "red", r);
     cJSON_AddNumberToObject(root, "green", g);
     cJSON_AddNumberToObject(root, "blue", b);
-    cJSON_AddNumberToObject(root, "speed", speed);
 
     char *post_data = cJSON_PrintUnformatted(root);
     esp_mqtt_client_publish(mqtt_client, s_topic, post_data, 0, 1, 0);

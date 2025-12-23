@@ -2,10 +2,11 @@
 #include <math.h>
 
 static float current_pwm = 0.0f;
+static bool kick_armed = true;
 
 #define MIN_PWM        20.0f   // deadzone thực tế
 #define MAX_PWM        100.0f
-#define KICK_PWM       45.0f
+#define KICK_PWM       47.0f
 #define KICK_TIME_MS   80
 #define PWM_SLEW_STEP  2.0f    // % mỗi dt (rất quan trọng)
 
@@ -22,14 +23,13 @@ void motor_speed_pid_step(motor_t *motor,
                           encoder_t *encoder,
                           pid_speed_t *pid,
                           float target_rps,
-                          float dt, bool was_stopped)
+                          float dt, bool was_stopped, float measured)
 {
-    float measured = encoder_get_rps(encoder);
-
     int64_t now = esp_timer_get_time();
 
     /* ===== STOP ===== */
     if (target_rps < 0.05f) {
+        kick_armed = true;
         pid_speed_reset(pid);
         current_pwm = 0;
         motor_set_speed(motor, 0);
@@ -38,9 +38,10 @@ void motor_speed_pid_step(motor_t *motor,
     }
 
     /* ===== KICK START ===== */
-    if (was_stopped && target_rps > 0.05f) {
+    if (kick_armed && was_stopped && target_rps > 0.05f) {
         kick_end_time = now + KICK_TIME_MS * 1000;
         was_stopped = false;
+        kick_armed = false;
     }
 
     if (kick_end_time > now) {

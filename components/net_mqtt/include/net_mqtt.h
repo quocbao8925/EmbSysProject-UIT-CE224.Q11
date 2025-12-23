@@ -12,7 +12,7 @@ esp_err_t mqtt_app_start(const char *broker_uri,
                          const char *password,
                          const char *topic);
 
-void send_data_to_mqtt(int r, int g, int b, float speed);
+void send_data_to_mqtt(int r, int g, int b);
 
 #ifdef __cplusplus
 }

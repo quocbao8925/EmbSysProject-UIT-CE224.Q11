@@ -35,7 +35,9 @@ float pid_speed_update(pid_speed_t *pid,
     float output =
           pid->kp * error
         + pid->ki * pid->integral;
-    output = (output*0.8 + last_delta*0.2);
+    output = (output*0.6 + last_delta*0.4);
     last_delta = output;
+    if (output > pid->output_max) output = pid->output_max;
+    if (output < pid->output_min) output = pid->output_min;
     return output;   // ΔPWM
 }

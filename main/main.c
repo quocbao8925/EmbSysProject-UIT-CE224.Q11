@@ -22,8 +22,8 @@
 
 
 // Cấu hình Wifi và MQTT Broker
-#define WIFI_SSID      "B17.17"
-#define WIFI_PASS      "12345678"
+#define WIFI_SSID      "Hp"
+#define WIFI_PASS      "11111111"
 #define MQTT_BROKER_URI "mqtts://132401d4e07649638b5a848c17540a65.s1.eu.hivemq.cloud:8883" // Broker public để test
 #define MQTT_TOPIC     "esp32/conveyor/data"
 
@@ -41,7 +41,7 @@
 #define I2C_SCL         GPIO_NUM_19
 #define I2C_FREQ        100000
 
-// Conveyor settings
+// Conveyor settingsg
 #define CONVEYOR_SPEED_PERCENT  20
 #define CONVEYOR_TIMEOUT_MS     5000
 #define IR_ACTIVE_LEVEL         0      // IR module thường active-low
@@ -49,11 +49,11 @@
 static const char *TAG = "main";
 
 // ================== GLOBAL HANDLERS ==================
-static TaskHandle_t button_task_handle = NULL;
+static TaskHandle_t button_task_handler = NULL;
 
 bool is_running = false;
 uint8_t counter[3] = {0}; // 0=RED,1=GREEN,2=BLUE
-float speed_buffer[] = {0, 5.0, 10.0, 15.0}; // RPS // PID speed buffer
+float speed_buffer[] = {0, 6.0, 10.0, 15.0}; // RPS // PID speed buffer
 uint8_t speed_idx = 0; // index trong speed_buffer
 uint8_t target_idx = 0;
 volatile float g_measured_rps = 0.0f; // tốc độ hiện tại đo từ encoder
@@ -87,7 +87,7 @@ pca9685_t pca = {
     .address = 0x40,
     .i2c_freq = I2C_FREQ
 };
-typedef enum { MODE_MANUAL=0, MODE_AUTO=1 } system_mode_t;
+typedef enum { MODE_MANUAL=0, MODE_AUTO=1} system_mode_t;
 
 volatile system_mode_t g_mode = MODE_MANUAL;
 volatile bool g_start_request = false;   // manual: bấm START để chạy 1 chu kỳ
@@ -104,20 +104,16 @@ static void button_task(void *arg);
 // ir sensor
 static void wait_ir_release(void);
 static bool check_ir_and_count(void);
-// lcd show counter
-static void lcd_show_counters(void);
+// lcd task
+static void lcd_task(void *arg);
 // 2 types of detecting color
 static color_t detect_color_once(void);
 static color_t detect_color_majority(uint8_t samples, uint32_t delay_ms);
 // main function to run the conveyor
-static void logic_task(void *arg);
+static void main_task(void *arg);
 
-void lcd_draw_once(void);
 // pid control for motor
 void motor_control_task(void *arg);
-void speed_monitor_task(void *arg);
-
-static void mqtt_publish_task(void *arg);
 
 // ================== APP MAIN ==================
 void app_main(void)
@@ -146,14 +142,14 @@ void app_main(void)
     motor_set_direction(&motorA, MOTOR_DIR_FORWARD);
     motor_set_speed(&motorA, 0);
     pid_speed_init(&pid,
-        25.0f,   // Kp
-        8.0f,    // Ki
+        1.0f,   // Kp
+        0.1f,    // Ki
         0.0f,    // Kd (0)
-       -10.0f,
-        10.0f
+       -3.0f,
+        1.0f
     );
     // testing push data to MQTT
-    wifi_init_sta("Bao Phuc", "08092005");
+    wifi_init_sta(WIFI_SSID, WIFI_PASS);
     mqtt_app_start(
         "mqtts://132401d4e07649638b5a848c17540a65.s1.eu.hivemq.cloud:8883",
         "conveyor",
@@ -162,17 +158,15 @@ void app_main(void)
     );
 
     // create tasks (TẠO TASK TRƯỚC, RỒI mới gắn ISR)
-    xTaskCreate(speed_monitor_task, "speed_monitor", 2048, NULL, 3, NULL);
-    xTaskCreate(button_task, "button_task", 2048, NULL, 10, &button_task_handle);
-    xTaskCreate(mqtt_publish_task, "mqtt_pub", 4096, NULL, 2, NULL);
+    xTaskCreate(lcd_task, "lcd_task", 2048, NULL, 5, NULL);
+    xTaskCreate(button_task, "button_task", 2048, NULL, 10, &button_task_handler);
     // Init button sau khi có task handle
     button_init();
     lcd_clear();
-    lcd_draw_once(); // khoi tao ki tu tren LCD
     // Tạo các task nặng/quan trọng và ghim vào Core (Tùy chọn, nhưng tốt cho hiệu năng)
     // Core 0 thường chạy Wifi/BT, Core 1 chạy App. 
     // Nếu bạn dùng Wifi nhiều, nên để rgb_task sang Core 1 cùng với LCD để tránh xung đột ngắt Wifi.
-    xTaskCreatePinnedToCore(logic_task, "logic_task", 4096, NULL, 8, NULL, 1);
+    xTaskCreatePinnedToCore(main_task, "main_task", 4096, NULL, 8, NULL, 1);
     xTaskCreatePinnedToCore(motor_control_task, "motor_ctrl", 4096, NULL, 5, NULL, 0);
     
 
@@ -245,10 +239,10 @@ static void i2c_bus_init(void)
 static void IRAM_ATTR button_isr(void *arg)
 {
     // ISR gọi trước khi task handle có thể tồn tại -> CHẶN NULL để khỏi assert/reset
-    if (button_task_handle == NULL) return;
+    if (button_task_handler == NULL) return;
 
     BaseType_t hp = pdFALSE;
-    xTaskNotifyFromISR(button_task_handle, 0x01, eSetBits, &hp);
+    xTaskNotifyFromISR(button_task_handler, 0x01, eSetBits, &hp);
     if (hp) portYIELD_FROM_ISR();
 }
 // ================== BUTTON ==================
@@ -313,28 +307,23 @@ static bool check_ir_and_count(void)
 {
     if (gpio_get_level(IRSENSOR_GPIO) == IR_ACTIVE_LEVEL) {
         counter[2]++; // BLUE
+        send_data_to_mqtt(counter[0], counter[1], counter[2]);
         ESP_LOGI(TAG, "IR BLUE hit");
         return true;
     }
     if (gpio_get_level(IRSENSOR_GPIO1) == IR_ACTIVE_LEVEL) {
         counter[1]++; // GREEN
+        send_data_to_mqtt(counter[0], counter[1], counter[2]);
         ESP_LOGI(TAG, "IR GREEN hit");
         return true;
     }
     if (gpio_get_level(IRSENSOR_GPIO2) == IR_ACTIVE_LEVEL) {
         counter[0]++; // RED
+        send_data_to_mqtt(counter[0], counter[1], counter[2]);
         ESP_LOGI(TAG, "IR RED hit");
         return true;
     }
     return false;
-}
- 
-static void lcd_show_counters(void)
-{
-    char buffer1[32];
-    lcd_put_cur(1, 0);
-    sprintf(buffer1, "R:%d G:%d B:%d   ", counter[0], counter[1], counter[2]);
-    lcd_send_string(buffer1);
 }
 // ================== COLOR DETECT WITH BUFFER (GIỮ KIỂU CŨ) ==================
 // return: 0=RED, 1=GREEN, 2=BLUE, 3=UNKNOWN
@@ -379,7 +368,7 @@ static color_t detect_color_majority(uint8_t samples, uint32_t delay_ms)
     return (color_t)max_i;
 }
 
-static void logic_task(void *arg)
+static void main_task(void *arg)
 {
     bool auto_gate_active = false; // AUTO: đang đóng/mở theo màu hay đang default?
     servos_default_open_all();
@@ -440,7 +429,7 @@ static void logic_task(void *arg)
 
             // Nếu đang default -> nhìn nhanh 1-2 lần để quyết định gate cho vật mới
             if (!auto_gate_active) {
-                color_t c = detect_color_majority(2, 10);
+                color_t c = detect_color_majority(2, 5);
                 if (c != COL_UNKNOWN) {
                     set_servos_for_color(c);
                     auto_gate_active = true;
@@ -456,25 +445,9 @@ static void logic_task(void *arg)
 
             vTaskDelay(pdMS_TO_TICKS(20));
         }
-        lcd_show_counters();
     }
 }
 
-void lcd_draw_once()
-{
-    char buffer[32];
-    char buffer1[32];
-    lcd_clear();
-        // Hiển thị thông tin lên LCD
-    lcd_put_cur(0, 0);
-    sprintf(buffer, "SP:%5.2f/%5.2f", g_measured_rps, speed_buffer[speed_idx]);
-    lcd_send_string(buffer);
-
-    lcd_put_cur(1, 0);
-    sprintf(buffer1, "R:%d G:%d B:%d   ",
-            counter[0], counter[1], counter[2]);
-    lcd_send_string(buffer1);
-}
 
 void motor_control_task(void *arg)
 {
@@ -496,31 +469,35 @@ void motor_control_task(void *arg)
         // NOTE: motor_speed_pid_step của bri đang đọc encoder bên trong.
         // Khuyến nghị: sửa motor_speed_pid_step để nhận measured (đỡ đọc 2 lần).
         // Nếu chưa sửa, vẫn chạy được, nhưng tốt nhất là sửa như ghi chú phía dưới.
-
-        motor_speed_pid_step(&motorA, &wheel_encoder, &pid, target_rps, CONTROL_DT, was_stopped);
+        ESP_LOGI(TAG, "Target RPS: %.2f, Measured RPS: %.2f", target_rps, measured);
+        motor_speed_pid_step(&motorA, &wheel_encoder, &pid, target_rps, CONTROL_DT, was_stopped, measured);
 
         vTaskDelay(pdMS_TO_TICKS(CONTROL_DT_MS));
     }
 }
-void speed_monitor_task(void *arg)
+static void lcd_task(void *arg)
 {
-    char buffer[32];
+    char line0[32], line1[32];
+
     while (1) {
-        float rps = g_measured_rps;
-        ESP_LOGI("SPEED", "Measured speed: %.3f RPS", rps);
+        // Line 0
+        // NOTE: dùng target_idx cho target, speed_idx của bri không update
+        snprintf(line0, sizeof(line0),
+                 "SP:%5.2f/%5.2f   ",  // thêm spaces để clear phần dư
+                 g_measured_rps, speed_buffer[target_idx]);
+
+        // Line 1
+        snprintf(line1, sizeof(line1),
+                 "R:%d G:%d B:%d %c   ",
+                 counter[0], counter[1], counter[2],
+                 (g_mode == MODE_MANUAL) ? 'M' : 'A');
 
         lcd_put_cur(0, 0);
-        sprintf(buffer, "SP:%5.2f/%5.2f", rps, speed_buffer[target_idx]);
-        lcd_send_string(buffer);
+        lcd_send_string(line0);
 
-        vTaskDelay(pdMS_TO_TICKS(300));
-    }
-}
-static void mqtt_publish_task(void *arg)
-{
-    while (1) {
-        // counter[0..2] + speed
-        send_data_to_mqtt(counter[0], counter[1], counter[2], g_measured_rps);
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        lcd_put_cur(1, 0);
+        lcd_send_string(line1);
+
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
