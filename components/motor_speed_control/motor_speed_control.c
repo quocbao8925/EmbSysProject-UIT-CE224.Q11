@@ -6,9 +6,10 @@ static bool kick_armed = true;
 
 #define MIN_PWM        20.0f   // deadzone thực tế
 #define MAX_PWM        100.0f
-#define KICK_PWM       47.0f
+#define KICK_PWM       45.0f
 #define KICK_TIME_MS   80
-#define PWM_SLEW_STEP  2.0f    // % mỗi dt (rất quan trọng)
+#define ACCEL_STEP     0.2f    // Tăng tốc cực chậm (0.2% mỗi chu kỳ)
+#define DECEL_STEP     2.0f    // Giảm tốc nhanh (2.0% mỗi chu kỳ) - để hãm phanh nhanh
 
 static int64_t kick_end_time = 0;
 
@@ -18,7 +19,6 @@ static float clampf(float x, float lo, float hi)
     if (x > hi) return hi;
     return x;
 }
-
 void motor_speed_pid_step(motor_t *motor,
                           encoder_t *encoder,
                           pid_speed_t *pid,
@@ -52,10 +52,18 @@ void motor_speed_pid_step(motor_t *motor,
         /* ===== PI: delta PWM ===== */
         float delta = pid_speed_update(pid, target_rps, measured, dt);
         /* Slew rate limit */
-        delta = clampf(delta, -PWM_SLEW_STEP, PWM_SLEW_STEP);
+        /* Slew rate limit ASYMMETRIC (Bất đối xứng) */
+        if (delta > 0) {
+            // Đang muốn tăng tốc -> Kìm hãm mạnh bằng ACCEL_STEP
+            if (delta > ACCEL_STEP) delta = ACCEL_STEP;
+        } else {
+            // Đang muốn giảm tốc -> Cho phép giảm nhanh hơn bằng DECEL_STEP
+            if (delta < -DECEL_STEP) delta = -DECEL_STEP;
+        }
 
         current_pwm += delta;
 
+        current_pwm += delta;
         /* Deadzone */
         if (current_pwm > 0 && current_pwm < MIN_PWM)
             current_pwm = MIN_PWM;

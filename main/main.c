@@ -51,6 +51,13 @@ static const char *TAG = "main";
 // ================== GLOBAL HANDLERS ==================
 static TaskHandle_t button_task_handler = NULL;
 
+// ===== AUTO speed steps =====
+static const float auto_speed_table[] = {0.0f, 2.0f, 4.0f, 6.0f, 8.0f, 10.0f};
+#define AUTO_SPEED_COUNT (sizeof(auto_speed_table)/sizeof(auto_speed_table[0]))
+
+volatile uint8_t g_auto_speed_idx = 3;   // default = 6 rps (match behavior cũ)
+volatile float   g_target_rps     = 0.0f; // motor_control_task sẽ đọc cái này
+
 bool is_running = false;
 uint8_t counter[3] = {0}; // 0=RED,1=GREEN,2=BLUE
 float speed_buffer[] = {0, 6.0, 10.0, 15.0}; // RPS // PID speed buffer
@@ -141,14 +148,8 @@ void app_main(void)
 
     motor_set_direction(&motorA, MOTOR_DIR_FORWARD);
     motor_set_speed(&motorA, 0);
-    pid_speed_init(&pid,
-        1.0f,   // Kp
-        0.1f,    // Ki
-        0.0f,    // Kd (0)
-       -3.0f,
-        1.0f
-    );
-    // testing push data to MQTT
+    pid_speed_init(&pid, 0.01, 0.001, 0.005, -1.0f, 1.0f);
+    //testing push data to MQTT
     wifi_init_sta(WIFI_SSID, WIFI_PASS);
     mqtt_app_start(
         "mqtts://132401d4e07649638b5a848c17540a65.s1.eu.hivemq.cloud:8883",
@@ -178,13 +179,13 @@ static void set_servos_for_color(color_t c)
     switch (c) {
         case COL_RED:
             servo_close(&pca, 0);
-            servo_close(&pca, 1);
-            servo_close(&pca, 2);
+            servo_open(&pca, 1);
+            servo_open(&pca, 2);
             break;
         case COL_GREEN:
             servo_open(&pca, 0);
             servo_close(&pca, 1);
-            servo_close(&pca, 2);
+            servo_open(&pca, 2);
             break;
         case COL_BLUE:
             servo_open(&pca, 0);
@@ -207,7 +208,7 @@ static void servos_default_open_all(void)
 static uint8_t speed_index_for_manual_color(color_t c)
 {
     switch (c) {
-        case COL_RED:   return 1; // 5
+        case COL_RED:   return 1; // 6
         case COL_GREEN: return 2; // 10
         case COL_BLUE:  return 2; // 10
         default:        return 3; // 15
@@ -281,6 +282,11 @@ static void button_task(void *arg)
         // MODE toggle
         if (gpio_get_level(BTN_GPIO1) == 0) {
             g_mode = (g_mode == MODE_MANUAL) ? MODE_AUTO : MODE_MANUAL;
+            if (g_mode == MODE_AUTO) {
+                g_target_rps = auto_speed_table[g_auto_speed_idx]; // default auto speed
+            } else {
+                g_target_rps = 0.0f;
+            }
             ESP_LOGI(TAG, "MODE -> %s", (g_mode==MODE_MANUAL)?"MANUAL":"AUTO");
 
             // khi đổi mode: reset mọi thứ về safe
@@ -294,12 +300,21 @@ static void button_task(void *arg)
 
         // START manual
         if (gpio_get_level(BTN_GPIO) == 0) {
-            if (g_mode == MODE_MANUAL && !is_running) {
-                g_start_request = true;
-                ESP_LOGI(TAG, "START requested (MANUAL)");
+
+            if (g_mode == MODE_MANUAL) {
+                if (!is_running) {
+                    g_start_request = true;
+                    ESP_LOGI(TAG, "START requested (MANUAL)");
+                } else {
+                    ESP_LOGI(TAG, "START ignored (running)");
+                }
             } else {
-                ESP_LOGI(TAG, "START ignored (AUTO or running)");
+                // AUTO: BTN0 = cycle speed
+                g_auto_speed_idx = (g_auto_speed_idx + 1) % AUTO_SPEED_COUNT;
+                g_target_rps = auto_speed_table[g_auto_speed_idx];
+                ESP_LOGI(TAG, "AUTO speed -> %.1f rps", g_target_rps);
             }
+
         }
     }
 }
@@ -395,10 +410,10 @@ static void main_task(void *arg)
             set_servos_for_color(c);
 
             // 3) set tốc độ theo màu
-            target_idx = speed_index_for_manual_color(c);
-
-            // 4) chạy băng tải (PID task sẽ tự chạy theo target_idx)
+            uint8_t idx = speed_index_for_manual_color(c);
+            g_target_rps = speed_buffer[idx];
             is_running = true;
+
             int64_t start = esp_timer_get_time();
 
             while (1) {
@@ -416,13 +431,16 @@ static void main_task(void *arg)
 
             // 5) stop + reset
             is_running = false;
-            target_idx = 0;
+            g_target_rps = 0.0f;
             servos_default_open_all();
 
         } else {
             // AUTO MODE
-            is_running = true;
-            target_idx = 1; // 5 rps luôn chạy
+            // AUTO: tốc độ lấy từ BTN0 (g_target_rps). Nếu mới vào AUTO mà chưa set thì set default:
+            if (g_target_rps < 0.01f) {
+                g_target_rps = auto_speed_table[g_auto_speed_idx]; // default 6 rps
+            }
+            is_running = (g_target_rps >= 0.05f);
 
             // default servo = open all cho unknown
             if (!auto_gate_active) servos_default_open_all();
@@ -448,29 +466,26 @@ static void main_task(void *arg)
     }
 }
 
-
 void motor_control_task(void *arg)
 {
     while (1) {
-        float target_rps = speed_buffer[target_idx];
+        float target_rps = g_target_rps;
 
-        // đo tốc độ 1 nơi duy nhất
         float measured = encoder_get_rps(&wheel_encoder);
         g_measured_rps = measured;
         was_stopped = (measured < 0.1f);
 
-        if (!is_running && target_rps < 0.05f) {
+        // Nếu target = 0 => stop + reset PID
+        if (target_rps < 0.05f) {
             pid_speed_reset(&pid);
             motor_set_speed(&motorA, 0);
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
 
-        // NOTE: motor_speed_pid_step của bri đang đọc encoder bên trong.
-        // Khuyến nghị: sửa motor_speed_pid_step để nhận measured (đỡ đọc 2 lần).
-        // Nếu chưa sửa, vẫn chạy được, nhưng tốt nhất là sửa như ghi chú phía dưới.
         ESP_LOGI(TAG, "Target RPS: %.2f, Measured RPS: %.2f", target_rps, measured);
-        motor_speed_pid_step(&motorA, &wheel_encoder, &pid, target_rps, CONTROL_DT, was_stopped, measured);
+        motor_speed_pid_step(&motorA, &wheel_encoder, &pid, target_rps,
+                            CONTROL_DT, was_stopped, measured);
 
         vTaskDelay(pdMS_TO_TICKS(CONTROL_DT_MS));
     }
@@ -483,8 +498,8 @@ static void lcd_task(void *arg)
         // Line 0
         // NOTE: dùng target_idx cho target, speed_idx của bri không update
         snprintf(line0, sizeof(line0),
-                 "SP:%5.2f/%5.2f   ",  // thêm spaces để clear phần dư
-                 g_measured_rps, speed_buffer[target_idx]);
+         "SP:%5.2f/%5.2f   ",
+         g_measured_rps, g_target_rps);
 
         // Line 1
         snprintf(line1, sizeof(line1),
