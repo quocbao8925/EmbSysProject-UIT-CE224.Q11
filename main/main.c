@@ -45,6 +45,7 @@
 #define CONVEYOR_SPEED_PERCENT  20
 #define CONVEYOR_TIMEOUT_MS     5000
 #define IR_ACTIVE_LEVEL         0      // IR module thường active-low
+#define NUM_SPEED_SAMPLES     6
 
 static const char *TAG = "main";
 
@@ -52,10 +53,10 @@ static const char *TAG = "main";
 static TaskHandle_t button_task_handler = NULL;
 
 // ===== AUTO speed steps =====
-static const float auto_speed_table[] = {0.0f, 2.0f, 4.0f, 6.0f, 8.0f, 10.0f};
+static const float auto_speed_table[] = {0.0f, 4.0f, 6.0f, 8.0f, 10.0f};
 #define AUTO_SPEED_COUNT (sizeof(auto_speed_table)/sizeof(auto_speed_table[0]))
 
-volatile uint8_t g_auto_speed_idx = 3;   // default = 6 rps (match behavior cũ)
+volatile uint8_t g_auto_speed_idx = 2;   // default = 6 rps (match behavior cũ)
 volatile float   g_target_rps     = 0.0f; // motor_control_task sẽ đọc cái này
 
 bool is_running = false;
@@ -148,7 +149,7 @@ void app_main(void)
 
     motor_set_direction(&motorA, MOTOR_DIR_FORWARD);
     motor_set_speed(&motorA, 0);
-    pid_speed_init(&pid, 0.01, 0.001, 0.005, -1.0f, 1.0f);
+    pid_speed_init(&pid, 0.01, 0.002, 0.005, -1.0f, 1.0f);
     //testing push data to MQTT
     wifi_init_sta(WIFI_SSID, WIFI_PASS);
     mqtt_app_start(
@@ -171,7 +172,7 @@ void app_main(void)
     xTaskCreatePinnedToCore(motor_control_task, "motor_ctrl", 4096, NULL, 5, NULL, 0);
     
 
-    ESP_LOGI(TAG, "System ready. Press button to start classification.");
+    //ESP_LOGI(TAG, "System ready. Press button to start classification.");
     
 }
 static void set_servos_for_color(color_t c)
@@ -183,14 +184,14 @@ static void set_servos_for_color(color_t c)
             servo_open(&pca, 2);
             break;
         case COL_GREEN:
-            servo_open(&pca, 0);
             servo_close(&pca, 1);
+            servo_open(&pca, 0);
             servo_open(&pca, 2);
             break;
         case COL_BLUE:
+            servo_close(&pca, 2);
             servo_open(&pca, 0);
             servo_open(&pca, 1);
-            servo_close(&pca, 2);
             break;
         default: // unknown
             servo_open(&pca, 0);
@@ -447,7 +448,7 @@ static void main_task(void *arg)
 
             // Nếu đang default -> nhìn nhanh 1-2 lần để quyết định gate cho vật mới
             if (!auto_gate_active) {
-                color_t c = detect_color_majority(2, 5);
+                color_t c = detect_color_majority(1, 5);
                 if (c != COL_UNKNOWN) {
                     set_servos_for_color(c);
                     auto_gate_active = true;
@@ -465,14 +466,23 @@ static void main_task(void *arg)
         }
     }
 }
-
+static uint8_t i_measured = NUM_SPEED_SAMPLES;
+static float sum_measured = 0;
 void motor_control_task(void *arg)
 {
     while (1) {
         float target_rps = g_target_rps;
 
         float measured = encoder_get_rps(&wheel_encoder);
-        g_measured_rps = measured;
+        if (i_measured){
+            i_measured--;
+            sum_measured += measured;
+        } else {
+            g_measured_rps = sum_measured / NUM_SPEED_SAMPLES;
+            i_measured = NUM_SPEED_SAMPLES;
+            sum_measured = 0;
+            ESP_LOGI(TAG, "Target RPS: %.2f, Measured RPS: %.2f", target_rps, g_measured_rps);
+        }
         was_stopped = (measured < 0.1f);
 
         // Nếu target = 0 => stop + reset PID
@@ -482,8 +492,6 @@ void motor_control_task(void *arg)
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
-
-        ESP_LOGI(TAG, "Target RPS: %.2f, Measured RPS: %.2f", target_rps, measured);
         motor_speed_pid_step(&motorA, &wheel_encoder, &pid, target_rps,
                             CONTROL_DT, was_stopped, measured);
 

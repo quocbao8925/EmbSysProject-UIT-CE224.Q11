@@ -7,7 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
 
-#define CONTROL_DT_MS   80
+#define CONTROL_DT_MS   83
 #define CONTROL_DT      (CONTROL_DT_MS / 1000.0f)
 
 typedef struct {
