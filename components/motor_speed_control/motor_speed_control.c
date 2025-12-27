@@ -9,7 +9,7 @@ static bool kick_armed = true;
 #define KICK_PWM       47.0f
 #define KICK_TIME_MS   50
 #define ACCEL_STEP     0.25f    // Tăng tốc cực chậm (0.2% mỗi chu kỳ)
-#define DECEL_STEP     0.25f    // Giảm tốc nhanh (2.0% mỗi chu kỳ) - để hãm phanh nhanh
+#define DECEL_STEP     0.25f    // Giảm tốc nhanh (0.2% mỗi chu kỳ) - để hãm phanh nhanh
 
 static int64_t kick_end_time = 0;
 

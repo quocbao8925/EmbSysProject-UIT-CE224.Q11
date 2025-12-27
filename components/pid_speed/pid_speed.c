@@ -27,22 +27,17 @@ float pid_speed_update(pid_speed_t *pid,
                        float measured,
                        float dt)
 {
-    float remove_p = 0;
     float error = target - measured;
     if (error > -1.0f && error < 1.0f) {
         error = 0.0f; 
-        // Khi error = 0, thành phần P sẽ mất, I ngừng tăng -> Motor giữ nguyên trạng thái
+        // error nho hon nguong se bi triet tieu.
     }
-    if (fabs(error) <= 0.5f) 
-        remove_p = 0;
-    else 
-        remove_p = 1;
     pid->integral += error * dt;
     if (pid->integral > 20.0f) pid->integral = 20.0f;
     if (pid->integral < -20.0f) pid->integral = -20.0f;
 
     float output =
-          pid->kp * error * remove_p
+          pid->kp * error
         + pid->ki * pid->integral
         - pid->kd * (measured - pid->prev_measured) / dt;
     output = (output*0.6 + last_delta*0.4);
