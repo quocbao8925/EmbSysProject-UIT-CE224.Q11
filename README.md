@@ -12,7 +12,7 @@
 
 | Student Name | Student ID | Role |
 | :--- | :--- | :--- |
-| **Bui Quoc Bao** | `2352009` | Member |
+| **Bui Quoc Bao** | `23520092` | Leader |
 | **Trinh Nguyen Thanh Binh** | `23520162` | Member |
 | **Le Tran Huynh Phong** | `23521164` | Member |
 | **Diep Thanh Phong** | `23521160` | Member |
