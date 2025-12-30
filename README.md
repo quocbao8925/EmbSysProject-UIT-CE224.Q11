@@ -20,7 +20,7 @@
 ---
 
 ## 📖 Overview
-<img width="837" height="622" alt="image" src="https://github.com/user-attachments/assets/f754aae3-74cb-4726-a5d7-94b54afd6761" />
+<img width="415" height="311" alt="image" src="https://github.com/user-attachments/assets/f754aae3-74cb-4726-a5d7-94b54afd6761" /> </br>
 </t> *Overview image of the finished system*
 
 This project implements a miniature automated conveyor belt system capable of sorting products by color. The system uses an **RGB Color Sensor** to detect the object's color and controls a **Servo Motor** to route the product to the correct destination.
