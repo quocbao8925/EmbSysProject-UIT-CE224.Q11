@@ -7,10 +7,8 @@
 
 static const char *TAG = "LCD";
 
-// Biến toàn cục lưu port đang dùng để các hàm send_data biết đường gửi
 static i2c_port_t g_i2c_num = I2C_NUM_0; 
 
-// Các bit điều khiển (GIỮ NGUYÊN)
 #define PIN_RS    0x01
 #define PIN_RW    0x02
 #define PIN_EN    0x04
@@ -18,7 +16,6 @@ static i2c_port_t g_i2c_num = I2C_NUM_0;
 
 static uint8_t backlight_state = PIN_BK;
 
-// Hàm gửi byte (SỬA ĐỂ DÙNG g_i2c_num)
 static esp_err_t i2c_write_byte(uint8_t val)
 {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
@@ -26,14 +23,11 @@ static esp_err_t i2c_write_byte(uint8_t val)
     i2c_master_write_byte(cmd, (LCD_ADDR << 1) | I2C_MASTER_WRITE, true);
     i2c_master_write_byte(cmd, val, true);
     i2c_master_stop(cmd);
-    // Dùng g_i2c_num thay vì macro cứng
     esp_err_t ret = i2c_master_cmd_begin(g_i2c_num, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     return ret;
 }
 
-// ... (Giữ nguyên hàm lcd_pulse_enable, lcd_write_nibble, lcd_send_byte, send_cmd, send_data...)
-// ... Copy lại y nguyên các hàm logic từ câu trả lời trước, chỉ cần đảm bảo i2c_write_byte đã sửa như trên ...
 
 static void lcd_pulse_enable(uint8_t val)
 {
@@ -62,18 +56,13 @@ static void lcd_send_byte(uint8_t val, uint8_t mode)
 void lcd_send_cmd(char cmd) { lcd_send_byte(cmd, 0); }
 void lcd_send_data(char data) { lcd_send_byte(data, PIN_RS); }
 
-// --- HÀM INIT ĐƯỢC SỬA ĐỔI ---
 void lcd_init(i2c_port_t port_num)
 {
-    // 1. Lưu port number vào biến toàn cục để dùng sau này
-    g_i2c_num = port_num;
 
-    // QUAN TRỌNG: KHÔNG gọi i2c_driver_install ở đây nữa!
-    // Chúng ta giả định rằng Main App hoặc PCA9685 đã khởi tạo Bus này rồi.
+    g_i2c_num = port_num;
     
     ESP_LOGI(TAG, "LCD using existing I2C Port %d", port_num);
 
-    // 2. Quy trình khởi tạo LCD (Logic cũ giữ nguyên)
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
     lcd_write_nibble(0x30, 0); vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -91,10 +80,10 @@ void lcd_init(i2c_port_t port_num)
     ESP_LOGI(TAG, "LCD Init Done on shared bus");
 }
 
-// ... (Giữ nguyên lcd_send_string, lcd_put_cur, lcd_clear) ...
+
 void lcd_send_string(char *str) { while (*str) lcd_send_data(*str++); }
 void lcd_put_cur(int row, int col) {
-    uint8_t address = (row == 0) ? 0x80 : 0xC0; // Đơn giản hóa ví dụ
+    uint8_t address = (row == 0) ? 0x80 : 0xC0; 
     if (row == 2) address = 0x94;
     if (row == 3) address = 0xD4;
     address += col;

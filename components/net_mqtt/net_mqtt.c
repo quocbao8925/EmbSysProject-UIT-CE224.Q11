@@ -17,7 +17,6 @@ static const char *TAG = "net_mqtt";
 static esp_mqtt_client_handle_t mqtt_client = NULL;
 static const char *s_topic = NULL;
 
-// ================= WIFI EVENT HANDLER (y như cũ) =================
 static void wifi_event_handler(void *arg,
                                esp_event_base_t event_base,
                                int32_t event_id,
@@ -70,7 +69,6 @@ esp_err_t wifi_init_sta(const char *ssid, const char *pass)
     return ESP_OK;
 }
 
-// ================= MQTT EVENT HANDLER (y như cũ) =================
 static void mqtt_event_handler(void *handler_args,
                                esp_event_base_t base,
                                int32_t event_id,
@@ -106,7 +104,6 @@ esp_err_t mqtt_app_start(const char *broker_uri,
         .credentials.username = username,
         .credentials.authentication.password = password,
 
-        // y như code cũ: dùng bundle
         .broker.verification.crt_bundle_attach = esp_crt_bundle_attach,
     };
 

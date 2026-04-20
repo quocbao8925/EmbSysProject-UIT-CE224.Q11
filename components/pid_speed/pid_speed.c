@@ -45,5 +45,5 @@ float pid_speed_update(pid_speed_t *pid,
     if (output > pid->output_max) output = pid->output_max;
     if (output < pid->output_min) output = pid->output_min;
     pid->prev_measured = measured;
-    return output;   // ΔPWM
+    return output;   // deltaPWM
 }

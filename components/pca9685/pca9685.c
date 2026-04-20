@@ -56,8 +56,6 @@ esp_err_t pca9685_set_pwm_freq(pca9685_t *dev, float freq)
 
 esp_err_t pca9685_init(pca9685_t *dev)
 {
-    // IMPORTANT: I2C driver must be installed in main already.
-    // Just init PCA9685 registers here.
 
     // reset mode
     ESP_ERROR_CHECK(write_reg(dev, MODE1_REG, MODE1_ALLCALL));
@@ -78,7 +76,7 @@ esp_err_t pca9685_set_servo_angle(pca9685_t *dev, uint8_t channel, float angle)
     if (angle < 0) angle = 0;
     if (angle > 180) angle = 180;
 
-    // typical 0.5ms..2.5ms at 50Hz
+    // typical 0.5 - 2.5ms at 50Hz
     float pulse_us = 500.0f + (angle / 180.0f) * 2000.0f; // 500..2500 us
     uint16_t ticks = (uint16_t)(pulse_us * 4096.0f / 20000.0f); // 20ms period
 

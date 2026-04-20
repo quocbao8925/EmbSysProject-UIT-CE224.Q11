@@ -52,9 +52,9 @@ void tcs34725_init(tcs34725_handler *handler)
 }
 void tcs34725_deinit(void)
 {
-    // Disable the sensor
+    // disable the sensor
     tcs_write(REG_ENABLE, 0x00);
-    // Delete I2C driver
+    // delete I2C driver
     i2c_driver_delete(I2C_MASTER_NUM);
     ESP_LOGI(TAG, "TCS34725 deinitialized");
 }
@@ -93,9 +93,6 @@ void tcs34725_reader(tcs34725_handler *handler)
             handler->g = (uint8_t)(gn * 255.0f + 0.5f);
             handler->b = (uint8_t)(bn * 255.0f + 0.5f);
 
-            /*ESP_LOGI(TAG,
-                "Raw: C=%u R=%u G=%u B=%u | Normalized RGB = %d, %d, %d",
-                c, r, g, b, handler->r, handler->g, handler->b);*/
         } else {
             ESP_LOGE(TAG, "Failed to read color data");
         }

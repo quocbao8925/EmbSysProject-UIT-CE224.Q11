@@ -20,9 +20,9 @@ void IRAM_ATTR ir_sensor_isr(void *arg) {
 }
 // init 
 void ir_sensor_init(ir_sensor_handler* handler, gpio_num_t gpio_num, bool use_pullup) {
-    // init queue
+
     ir_sensor_queue = xQueueCreate(IR_SENSOR_QUEUE_SIZE, sizeof(ir_sensor_event_t));
-    // init GPIO
+
     s_gpio = gpio_num;
     gpio_config_t io = {
         .pin_bit_mask = 1ULL << s_gpio,

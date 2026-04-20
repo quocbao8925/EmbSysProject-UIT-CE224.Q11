@@ -29,5 +29,6 @@
     "tcs34725.h": "c"
   },
   "idf.flashType": "UART",
-  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json"
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+  "idf.currentSetup": "d:\\Progs\\ESP\\esp\\v5.5.1\\esp-idf"
 }
