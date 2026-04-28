@@ -21,13 +21,12 @@
 #include "net_mqtt.h"
 
 
-// Cấu hình Wifi và MQTT Broker
-#define WIFI_SSID      "Hp"
-#define WIFI_PASS      "11111111"
+#define WIFI_SSID      ""
+#define WIFI_PASS      ""
 #define MQTT_BROKER_URI "mqtts://132401d4e07649638b5a848c17540a65.s1.eu.hivemq.cloud:8883" // Broker public để test
 #define MQTT_TOPIC     "esp32/conveyor/data"
 
-// ================== PIN MAP ==================
+
 #define IRSENSOR_GPIO   GPIO_NUM_16
 #define IRSENSOR_GPIO1   GPIO_NUM_17
 #define IRSENSOR_GPIO2   GPIO_NUM_23
@@ -35,37 +34,35 @@
 #define BTN_GPIO1       GPIO_NUM_32
 #define USE_PULLUP      1
 
-// I2C for TCS34725 + PCA9685
+
 #define I2C_PORT        I2C_NUM_1
 #define I2C_SDA         GPIO_NUM_18
 #define I2C_SCL         GPIO_NUM_19
 #define I2C_FREQ        100000
 
-// Conveyor settingsg
+
 #define CONVEYOR_SPEED_PERCENT  20
 #define CONVEYOR_TIMEOUT_MS     5000
-#define IR_ACTIVE_LEVEL         0      // IR module thường active-low
+#define IR_ACTIVE_LEVEL         0     
 #define NUM_SPEED_SAMPLES     6
 
 static const char *TAG = "main";
 
-// ================== GLOBAL HANDLERS ==================
 static TaskHandle_t button_task_handler = NULL;
 
-// ===== AUTO speed steps =====
 static const float auto_speed_table[] = {0.0f, 4.0f, 6.0f, 8.0f, 10.0f};
 #define AUTO_SPEED_COUNT (sizeof(auto_speed_table)/sizeof(auto_speed_table[0]))
 
-volatile uint8_t g_auto_speed_idx = 2;   // default = 6 rps (match behavior cũ)
-volatile float   g_target_rps     = 0.0f; // motor_control_task sẽ đọc cái này
+volatile uint8_t g_auto_speed_idx = 2;   
+volatile float   g_target_rps     = 0.0f; 
 
 bool is_running = false;
-uint8_t counter[3] = {0}; // 0=RED,1=GREEN,2=BLUE
-float speed_buffer[] = {0, 6.0, 10.0, 15.0}; // RPS // PID speed buffer
-uint8_t speed_idx = 0; // index trong speed_buffer
+uint8_t counter[3] = {0}; 
+float speed_buffer[] = {0, 6.0, 10.0, 15.0};
+uint8_t speed_idx = 0; 
 uint8_t target_idx = 0;
-volatile float g_measured_rps = 0.0f; // tốc độ hiện tại đo từ encoder
-bool was_stopped = true; // trạng thái trước đó của băng tải
+volatile float g_measured_rps = 0.0f; 
+bool was_stopped = true; 
 
 ir_sensor_handler ir_handler;
 ir_sensor_handler ir_handler1;
@@ -98,9 +95,9 @@ pca9685_t pca = {
 typedef enum { MODE_MANUAL=0, MODE_AUTO=1} system_mode_t;
 
 volatile system_mode_t g_mode = MODE_MANUAL;
-volatile bool g_start_request = false;   // manual: bấm START để chạy 1 chu kỳ
+volatile bool g_start_request = false; 
 typedef enum { COL_RED=0, COL_GREEN=1, COL_BLUE=2, COL_UNKNOWN=3 } color_t;
-// ================== PROTOTYPES ==================
+
 static void set_servos_for_color(color_t c);
 static void servos_default_open_all(void);
 static uint8_t speed_index_for_manual_color(color_t c);
@@ -123,23 +120,21 @@ static void main_task(void *arg);
 // pid control for motor
 void motor_control_task(void *arg);
 
-// ================== APP MAIN ==================
 void app_main(void)
 {
-    // ISR service: chỉ install 1 lần.
+
     esp_err_t isr_err = gpio_install_isr_service(0);
     if (isr_err != ESP_OK && isr_err != ESP_ERR_INVALID_STATE) {
         ESP_ERROR_CHECK(isr_err);
     }
 
-    // I2C bus init (1 lần duy nhất)
     i2c_bus_init();
-    lcd_init(I2C_PORT); // khởi tạo LCD trên bus đã có
+    lcd_init(I2C_PORT); 
     lcd_clear();
 
 
     // init devices
-    ESP_ERROR_CHECK(pca9685_init(&pca));        // PCA init (KHÔNG install i2c bên trong)
+    ESP_ERROR_CHECK(pca9685_init(&pca));     
     ir_sensor_init(&ir_handler, IRSENSOR_GPIO, USE_PULLUP);
     ir_sensor_init(&ir_handler1, IRSENSOR_GPIO1, USE_PULLUP);
     ir_sensor_init(&ir_handler2, IRSENSOR_GPIO2, USE_PULLUP);
@@ -159,20 +154,14 @@ void app_main(void)
         "esp32/conveyor/data"
     );
 
-    // create tasks (TẠO TASK TRƯỚC, RỒI mới gắn ISR)
     xTaskCreate(lcd_task, "lcd_task", 2048, NULL, 5, NULL);
     xTaskCreate(button_task, "button_task", 2048, NULL, 10, &button_task_handler);
-    // Init button sau khi có task handle
+
     button_init();
     lcd_clear();
-    // Tạo các task nặng/quan trọng và ghim vào Core (Tùy chọn, nhưng tốt cho hiệu năng)
-    // Core 0 thường chạy Wifi/BT, Core 1 chạy App. 
-    // Nếu bạn dùng Wifi nhiều, nên để rgb_task sang Core 1 cùng với LCD để tránh xung đột ngắt Wifi.
+
     xTaskCreatePinnedToCore(main_task, "main_task", 4096, NULL, 8, NULL, 1);
     xTaskCreatePinnedToCore(motor_control_task, "motor_ctrl", 4096, NULL, 5, NULL, 0);
-    
-
-    //ESP_LOGI(TAG, "System ready. Press button to start classification.");
     
 }
 static void set_servos_for_color(color_t c)
@@ -216,7 +205,6 @@ static uint8_t speed_index_for_manual_color(color_t c)
     }
 }
 
-// ================== I2C INIT (CHỈ 1 LẦN) ==================
 static void i2c_bus_init(void)
 {
     i2c_config_t conf = {
@@ -231,8 +219,6 @@ static void i2c_bus_init(void)
 
     ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &conf));
 
-    // Nếu đã install rồi thì delete trước (tránh “install error”)
-    // (delete fail cũng kệ, vì có thể chưa install)
     i2c_driver_delete(I2C_PORT);
 
     ESP_ERROR_CHECK(i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0));
@@ -240,14 +226,14 @@ static void i2c_bus_init(void)
 }
 static void IRAM_ATTR button_isr(void *arg)
 {
-    // ISR gọi trước khi task handle có thể tồn tại -> CHẶN NULL để khỏi assert/reset
+
     if (button_task_handler == NULL) return;
 
     BaseType_t hp = pdFALSE;
     xTaskNotifyFromISR(button_task_handler, 0x01, eSetBits, &hp);
     if (hp) portYIELD_FROM_ISR();
 }
-// ================== BUTTON ==================
+
 static void button_init(void)
 {
     gpio_config_t io_conf = {
@@ -255,7 +241,7 @@ static void button_init(void)
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_NEGEDGE  // nhấn kéo xuống GND
+        .intr_type = GPIO_INTR_NEGEDGE  
     };
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
@@ -265,7 +251,7 @@ static void button_init(void)
 
 static void wait_ir_release(void)
 {
-    // chờ tất cả IR về inactive
+
     while (gpio_get_level(IRSENSOR_GPIO)  == IR_ACTIVE_LEVEL ||
            gpio_get_level(IRSENSOR_GPIO1) == IR_ACTIVE_LEVEL ||
            gpio_get_level(IRSENSOR_GPIO2) == IR_ACTIVE_LEVEL) {
@@ -280,7 +266,7 @@ static void button_task(void *arg)
         xTaskNotifyWait(0, UINT32_MAX, &bits, portMAX_DELAY);
         vTaskDelay(pdMS_TO_TICKS(30)); // debounce
 
-        // MODE toggle
+
         if (gpio_get_level(BTN_GPIO1) == 0) {
             g_mode = (g_mode == MODE_MANUAL) ? MODE_AUTO : MODE_MANUAL;
             if (g_mode == MODE_AUTO) {
@@ -290,7 +276,6 @@ static void button_task(void *arg)
             }
             ESP_LOGI(TAG, "MODE -> %s", (g_mode==MODE_MANUAL)?"MANUAL":"AUTO");
 
-            // khi đổi mode: reset mọi thứ về safe
             g_start_request = false;
             is_running = false;
             target_idx = 0;
@@ -341,8 +326,7 @@ static bool check_ir_and_count(void)
     }
     return false;
 }
-// ================== COLOR DETECT WITH BUFFER (GIỮ KIỂU CŨ) ==================
-// return: 0=RED, 1=GREEN, 2=BLUE, 3=UNKNOWN
+
 static color_t detect_color_once(void)
 {
     int8_t offsetr = 53, offsetg = 97, offsetb = 87;
@@ -386,13 +370,12 @@ static color_t detect_color_majority(uint8_t samples, uint32_t delay_ms)
 
 static void main_task(void *arg)
 {
-    bool auto_gate_active = false; // AUTO: đang đóng/mở theo màu hay đang default?
+    bool auto_gate_active = false; 
     servos_default_open_all();
 
     while (1) {
         if (g_mode == MODE_MANUAL) {
 
-            // MANUAL: motor dừng chờ start
             target_idx = 0;
             is_running = false;
             auto_gate_active = false;
@@ -404,13 +387,10 @@ static void main_task(void *arg)
             }
             g_start_request = false;
 
-            // 1) nhìn màu nhiều lần khi motor đang dừng
             color_t c = detect_color_majority(10, 50);
 
-            // 2) set servo theo màu
             set_servos_for_color(c);
 
-            // 3) set tốc độ theo màu
             uint8_t idx = speed_index_for_manual_color(c);
             g_target_rps = speed_buffer[idx];
             is_running = true;
@@ -430,23 +410,19 @@ static void main_task(void *arg)
                 vTaskDelay(pdMS_TO_TICKS(5));
             }
 
-            // 5) stop + reset
             is_running = false;
             g_target_rps = 0.0f;
             servos_default_open_all();
 
         } else {
-            // AUTO MODE
-            // AUTO: tốc độ lấy từ BTN0 (g_target_rps). Nếu mới vào AUTO mà chưa set thì set default:
+
             if (g_target_rps < 0.01f) {
                 g_target_rps = auto_speed_table[g_auto_speed_idx]; // default 6 rps
             }
             is_running = (g_target_rps >= 0.05f);
 
-            // default servo = open all cho unknown
             if (!auto_gate_active) servos_default_open_all();
 
-            // Nếu đang default -> nhìn nhanh 1-2 lần để quyết định gate cho vật mới
             if (!auto_gate_active) {
                 color_t c = detect_color_majority(1, 5);
                 if (c != COL_UNKNOWN) {
@@ -455,7 +431,6 @@ static void main_task(void *arg)
                 }
             }
 
-            // Nếu IR hit -> trả servo về default open all
             if (check_ir_and_count()) {
                 wait_ir_release();
                 servos_default_open_all();
@@ -485,7 +460,6 @@ void motor_control_task(void *arg)
         }
         was_stopped = (measured < 0.1f);
 
-        // Nếu target = 0 => stop + reset PID
         if (target_rps < 0.05f) {
             pid_speed_reset(&pid);
             motor_set_speed(&motorA, 0);
@@ -503,13 +477,11 @@ static void lcd_task(void *arg)
     char line0[32], line1[32];
 
     while (1) {
-        // Line 0
-        // NOTE: dùng target_idx cho target, speed_idx của bri không update
+
         snprintf(line0, sizeof(line0),
          "SP:%5.2f/%5.2f   ",
          g_measured_rps, g_target_rps);
 
-        // Line 1
         snprintf(line1, sizeof(line1),
                  "R:%d G:%d B:%d %c   ",
                  counter[0], counter[1], counter[2],

@@ -1,5 +1,0 @@
-Command: ninja COM3
-[0/1] Re-running CMake...
--- Minimal build - ON
--- ccache will be used for faster recompilation
--- Building ESP-IDF components for target esp32
