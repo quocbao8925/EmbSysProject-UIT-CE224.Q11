@@ -30,7 +30,7 @@ build/
 *.map
 flasher_args.json # Generated in build directory
 sdkconfig.old
-sdkconfig
+sdkconfig*
 
 # ESP-IDF dependencies
 # For older versions or manual component management
@@ -40,6 +40,8 @@ sdkconfig
 managed_components/
 # If ESP-IDF tools are installed/referenced locally to the project
 .espressif/
+
+[Ee][Ss][Pp]32-DevKit*
 
 # CMake generated files
 CMakeCache.txt
@@ -77,3 +79,5 @@ Desktop.ini
 *.workspace # General workspace files, can be from various tools
 *.suo       # Visual Studio Solution User Options
 *.sln.docstates # Visual Studio
+
+pytest_blink.py
